@@ -1,0 +1,691 @@
+package com.example.ui.screens.add_transaction
+
+import android.app.DatePickerDialog
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import com.example.data.local.entity.GroupExpenseShareMode
+import com.example.util.AmountFormatter
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.local.entity.AccountEntity
+import com.example.data.local.entity.TransactionType
+import com.example.ui.components.AmountInput
+import com.example.ui.components.CategoryPicker
+import com.example.ui.theme.ExpenseColor
+import com.example.ui.theme.IncomeColor
+import com.example.ui.theme.TransferColor
+import com.example.util.DateFormatter
+import java.util.Calendar
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddTransactionScreen(
+    viewModel: AddTransactionViewModel,
+    onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+
+    if (showDatePicker) {
+        com.example.ui.components.JalaliDatePickerDialog(
+            initialTimestamp = state.dateTimestamp,
+            onDateSelected = { timestamp ->
+                viewModel.setDateTimestamp(timestamp)
+                showDatePicker = false
+            },
+            onDismiss = { showDatePicker = false }
+        )
+    }
+
+    if (showTimePicker) {
+        com.example.ui.components.FinTrackTimePickerDialog(
+            initialHour = state.selectedHour,
+            initialMinute = state.selectedMinute,
+            onTimeSelected = { hour, minute ->
+                viewModel.setTime(hour, minute)
+                showTimePicker = false
+            },
+            onDismiss = { showTimePicker = false }
+        )
+    }
+
+    LaunchedEffect(state.isSuccess) {
+        if (state.isSuccess) {
+            onNavigateBack()
+        }
+    }
+
+    LaunchedEffect(state.errorMessage) {
+        state.errorMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("ثبت تراکنش جدید", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "بازگشت"
+                        )
+                    }
+                }
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        modifier = modifier
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Transaction Type Tabs
+            val selectedTabIndex = when (state.type) {
+                TransactionType.EXPENSE -> 0
+                TransactionType.INCOME -> 1
+                TransactionType.TRANSFER -> 2
+            }
+
+            TabRow(
+                selectedTabIndex = selectedTabIndex,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp))
+            ) {
+                Tab(
+                    selected = state.type == TransactionType.EXPENSE,
+                    onClick = { viewModel.setTransactionType(TransactionType.EXPENSE) },
+                    text = {
+                        Text(
+                            "هزینه",
+                            fontWeight = FontWeight.Bold,
+                            color = if (state.type == TransactionType.EXPENSE) ExpenseColor else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                )
+                Tab(
+                    selected = state.type == TransactionType.INCOME,
+                    onClick = { viewModel.setTransactionType(TransactionType.INCOME) },
+                    text = {
+                        Text(
+                            "درآمد",
+                            fontWeight = FontWeight.Bold,
+                            color = if (state.type == TransactionType.INCOME) IncomeColor else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                )
+                Tab(
+                    selected = state.type == TransactionType.TRANSFER,
+                    onClick = { viewModel.setTransactionType(TransactionType.TRANSFER) },
+                    text = {
+                        Text(
+                            "انتقال",
+                            fontWeight = FontWeight.Bold,
+                            color = if (state.type == TransactionType.TRANSFER) TransferColor else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                )
+            }
+
+            val activeColor = when (state.type) {
+                TransactionType.EXPENSE -> ExpenseColor
+                TransactionType.INCOME -> IncomeColor
+                TransactionType.TRANSFER -> TransferColor
+            }
+
+            // Amount Input
+            Text(
+                text = "مبلغ تراکنش",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            AmountInput(
+                amount = state.amount,
+                onAmountChange = { viewModel.setAmount(it) },
+                color = activeColor
+            )
+
+            // Category Picker (For EXPENSE / INCOME)
+            if (state.type != TransactionType.TRANSFER) {
+                Text(
+                    text = "دسته‌بندی",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                CategoryPicker(
+                    categories = state.categories,
+                    selectedCategoryId = state.selectedCategory?.id,
+                    onCategorySelected = { viewModel.setSelectedCategory(it) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // Account Selector
+            Text(
+                text = if (state.type == TransactionType.TRANSFER) "حساب مبدا" else "حساب",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            AccountDropdown(
+                accounts = state.accounts,
+                selectedAccount = state.selectedAccount,
+                onAccountSelected = { viewModel.setSelectedAccount(it) }
+            )
+
+            // Destination Account Selector (For TRANSFER)
+            if (state.type == TransactionType.TRANSFER) {
+                Text(
+                    text = "حساب مقصد",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                AccountDropdown(
+                    accounts = state.accounts.filter { it.id != state.selectedAccount?.id },
+                    selectedAccount = state.selectedToAccount,
+                    onAccountSelected = { viewModel.setSelectedToAccount(it) }
+                )
+            }
+
+            // Date & Time Selector
+            Text(
+                text = "تاریخ و ساعت تراکنش",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Date Selector
+                OutlinedCard(
+                    modifier = Modifier
+                        .weight(1.3f)
+                        .clickable { showDatePicker = true },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarToday,
+                            contentDescription = "تاریخ",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = DateFormatter.formatMedium(state.dateTimestamp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                // Time Selector
+                OutlinedCard(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { showTimePicker = true },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccessTime,
+                            contentDescription = "ساعت",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = DateFormatter.formatTime(state.selectedHour, state.selectedMinute),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Optional Note
+            Text(
+                text = "توضیحات (اختیاری)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            OutlinedTextField(
+                value = state.note,
+                onValueChange = { viewModel.setNote(it) },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("مثال: ناهار با دوستان") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            // Group Expense (Dong) Section - Only for EXPENSE
+            if (state.type == TransactionType.EXPENSE) {
+                var newPersonName by remember { mutableStateOf("") }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (state.isGroupExpenseEnabled)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Group,
+                                    contentDescription = null,
+                                    tint = if (state.isGroupExpenseEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "هزینه مشترک (دنگ)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "تقسیم مبلغ بین افراد و ثبت طلب",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = state.isGroupExpenseEnabled,
+                                onCheckedChange = { viewModel.setGroupExpenseEnabled(it) }
+                            )
+                        }
+
+                        if (state.isGroupExpenseEnabled) {
+                            // Mode Selection Tabs
+                            TabRow(
+                                selectedTabIndex = if (state.groupShareMode == GroupExpenseShareMode.EQUAL) 0 else 1,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                            ) {
+                                Tab(
+                                    selected = state.groupShareMode == GroupExpenseShareMode.EQUAL,
+                                    onClick = { viewModel.setGroupShareMode(GroupExpenseShareMode.EQUAL) },
+                                    text = { Text("تقسیم مساوی") }
+                                )
+                                Tab(
+                                    selected = state.groupShareMode == GroupExpenseShareMode.CUSTOM,
+                                    onClick = { viewModel.setGroupShareMode(GroupExpenseShareMode.CUSTOM) },
+                                    text = { Text("سهم دلخواه") }
+                                )
+                            }
+
+                            // Add Person Input
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = newPersonName,
+                                    onValueChange = { newPersonName = it },
+                                    modifier = Modifier.weight(1f),
+                                    placeholder = { Text("نام دوست یا هم‌سفر...") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                Button(
+                                    onClick = {
+                                        if (newPersonName.isNotBlank()) {
+                                            viewModel.addGroupPerson(newPersonName)
+                                            newPersonName = ""
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.Add, contentDescription = "افزودن")
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("افزودن")
+                                }
+                            }
+
+                            // Suggested Names Chips (from previous dongs)
+                            val availableSuggestions = state.recentPersonNames.filter { name ->
+                                state.groupShares.none { it.name.equals(name, ignoreCase = true) }
+                            }
+                            if (availableSuggestions.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "افراد پیشنهادی اخیر:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        items(availableSuggestions) { name ->
+                                            AssistChip(
+                                                onClick = { viewModel.addGroupPerson(name) },
+                                                label = { Text(name) },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Person,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // List of Added Persons
+                            if (state.groupShares.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "هنوز فردی به هزینه مشترک اضافه نشده است.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    state.groupShares.forEachIndexed { index, person ->
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Person,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = person.name,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                        if (state.groupShareMode == GroupExpenseShareMode.EQUAL) {
+                                                            Text(
+                                                                text = AmountFormatter.formatAmountWithCurrency(person.amount),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = MaterialTheme.colorScheme.primary
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                // If CUSTOM mode, editable amount field
+                                                if (state.groupShareMode == GroupExpenseShareMode.CUSTOM) {
+                                                    OutlinedTextField(
+                                                        value = if (person.amount > 0) person.amount.toString() else "",
+                                                        onValueChange = { input ->
+                                                            val clean = input.filter { it.isDigit() }
+                                                            val num = clean.toLongOrNull() ?: 0L
+                                                            viewModel.updateGroupPersonAmount(person.id, num)
+                                                        },
+                                                        modifier = Modifier.width(130.dp),
+                                                        placeholder = { Text("مبلغ ریال") },
+                                                        singleLine = true,
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    )
+                                                }
+
+                                                IconButton(
+                                                    onClick = { viewModel.removeGroupPerson(person.id) }
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "حذف فرد",
+                                                        tint = MaterialTheme.colorScheme.error
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // In CUSTOM mode, calculate user's own share automatically (amount - sum of friends' shares)
+                                if (state.groupShareMode == GroupExpenseShareMode.CUSTOM) {
+                                    val sumFriends = state.groupShares.sumOf { it.amount }
+                                    val myShare = state.amount - sumFriends
+
+                                    if (myShare < 0L) {
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(10.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "مازاد سهم دوستان:",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    text = AmountFormatter.formatAmountWithCurrency(kotlin.math.abs(myShare)),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(10.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "سهم خودم:",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Text(
+                                                    text = AmountFormatter.formatAmountWithCurrency(myShare),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Save Button
+            val buttonColor = when (state.type) {
+                TransactionType.EXPENSE -> ExpenseColor
+                TransactionType.INCOME -> IncomeColor
+                TransactionType.TRANSFER -> TransferColor
+            }
+
+            Button(
+                onClick = { viewModel.saveTransaction() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                enabled = !state.isLoading,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = buttonColor)
+            ) {
+                Icon(imageVector = Icons.Default.Check, contentDescription = "ثبت")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("ثبت تراکنش", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun AccountDropdown(
+    accounts: List<AccountEntity>,
+    selectedAccount: AccountEntity?,
+    onAccountSelected: (AccountEntity) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        OutlinedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true },
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = selectedAccount?.name ?: "انتخاب حساب",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.fillMaxWidth(0.9f)
+        ) {
+            accounts.forEach { acc ->
+                DropdownMenuItem(
+                    text = { Text(acc.name, fontWeight = FontWeight.Medium) },
+                    onClick = {
+                        onAccountSelected(acc)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
