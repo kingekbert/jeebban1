@@ -1,8 +1,58 @@
 package com.example.util
 
+import android.content.Context
 import com.example.data.local.entity.CategoryEntity
+import com.example.data.local.entity.TransactionType
 
 object CategoryGuesser {
+
+    private const val PREFS_NAME = "jeebban_category_prefs"
+    private const val KEY_LAST_EXPENSE_CAT = "last_expense_cat_id"
+    private const val KEY_LAST_INCOME_CAT = "last_income_cat_id"
+
+    fun saveLastUsedCategory(context: Context, type: TransactionType, categoryId: Long) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val key = if (type == TransactionType.INCOME) KEY_LAST_INCOME_CAT else KEY_LAST_EXPENSE_CAT
+            prefs.edit().putLong(key, categoryId).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun getLastUsedCategoryId(context: Context, type: TransactionType): Long? {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val key = if (type == TransactionType.INCOME) KEY_LAST_INCOME_CAT else KEY_LAST_EXPENSE_CAT
+            val id = prefs.getLong(key, -1L)
+            if (id > 0) id else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun resolveCategory(
+        text: String,
+        categories: List<CategoryEntity>,
+        context: Context,
+        type: TransactionType
+    ): CategoryEntity? {
+        if (categories.isEmpty()) return null
+
+        // 1. Keyword match from SMS description & bank text
+        val guessed = guessCategory(text, categories)
+        if (guessed != null) return guessed
+
+        // 2. Last used category of the same type
+        val lastUsedId = getLastUsedCategoryId(context, type)
+        if (lastUsedId != null) {
+            val matchedLast = categories.find { it.id == lastUsedId }
+            if (matchedLast != null) return matchedLast
+        }
+
+        // 3. Fallback to first category only as last resort
+        return categories.firstOrNull()
+    }
 
     fun guessCategory(
         text: String,

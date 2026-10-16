@@ -131,10 +131,34 @@ object WidgetStatusHelper {
         }
     }
 
+    fun isDarkThemeActive(context: Context): Boolean {
+        return try {
+            val prefs = context.getSharedPreferences(com.example.util.Constants.PREFS_NAME, Context.MODE_PRIVATE)
+            val mode = prefs.getString(com.example.util.Constants.KEY_THEME_MODE, "SYSTEM") ?: "SYSTEM"
+            when (mode) {
+                "DARK" -> true
+                "LIGHT" -> false
+                else -> {
+                    val nightModeFlags = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+                    nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                }
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun updateWidgets(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         val lastTime = getLastScanTimestamp(context)
         val newCount = getLastNewSmsCount(context)
         val statusText = formatWidgetStatusText(lastTime, newCount)
+        val isDark = isDarkThemeActive(context)
+
+        val titleColor = if (isDark) 0xFF81C784.toInt() else 0xFF1B5E20.toInt()
+        val subtitleColor = if (isDark) 0xFFA0A0A0.toInt() else 0xFF424843.toInt()
+        val statusColor = if (isDark) 0xFFB0B0B0.toInt() else 0xFF556B5C.toInt()
+        val emptyNormalColor = if (isDark) 0xFF81C784.toInt() else 0xFF1B5E20.toInt()
+        val emptySuccessColor = if (isDark) 0xFF66BB6A.toInt() else 0xFF2E7D32.toInt()
 
         for (appWidgetId in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_sms_scan)
@@ -163,19 +187,24 @@ object WidgetStatusHelper {
             )
             views.setOnClickPendingIntent(R.id.widget_btn_scan, scanPendingIntent)
 
-            // 3. Status text & Title
+            // 3. Status text & Title & Subtitle with theme-adaptive colors
             views.setTextViewText(R.id.widget_tv_status, statusText)
+            views.setTextColor(R.id.widget_tv_status, statusColor)
             views.setTextViewText(R.id.widget_tv_title, context.getString(R.string.app_name))
+            views.setTextColor(R.id.widget_tv_title, titleColor)
+            views.setTextColor(R.id.widget_tv_subtitle, subtitleColor)
 
             // 4. Empty View text: precise and contextual (never shows false success during initial or scanning)
             if (lastTime <= 0L) {
                 views.setTextViewText(R.id.widget_tv_empty_title, "پیامک‌های بانکی ۷ روز اخیر")
-                views.setTextColor(R.id.widget_tv_empty_title, ContextCompat.getColor(context, R.color.widget_title_color))
+                views.setTextColor(R.id.widget_tv_empty_title, emptyNormalColor)
                 views.setTextViewText(R.id.widget_tv_empty_sub, "برای یافتن پیامک‌های ثبت‌نشده، دکمه «اسکن پیامک‌ها» را لمس کنید.")
+                views.setTextColor(R.id.widget_tv_empty_sub, statusColor)
             } else if (newCount == 0) {
                 views.setTextViewText(R.id.widget_tv_empty_title, "همه پیامک‌های ۷ روز گذشته ثبت شده‌اند ✅")
-                views.setTextColor(R.id.widget_tv_empty_title, ContextCompat.getColor(context, R.color.widget_income_color))
+                views.setTextColor(R.id.widget_tv_empty_title, emptySuccessColor)
                 views.setTextViewText(R.id.widget_tv_empty_sub, "هیچ تراکنش ثبت‌نشده‌ای در ۷ روز اخیر یافت نشد.")
+                views.setTextColor(R.id.widget_tv_empty_sub, statusColor)
             }
 
             // 5. Remote Collection Adapter for ListView

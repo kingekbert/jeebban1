@@ -8,10 +8,10 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <!-- Widget Semantic Colors Aligned with App Theme (Light) -->
+    <!-- Widget Semantic Colors (Light Theme) -->
     <color name="widget_card_bg">#FFFFFFFF</color>
     <color name="widget_outer_bg">#FFF7F9F7</color>
-    <color name="widget_card_border">#FFCBD3CC</color>
+    <color name="widget_card_border">#FFE0E0E0</color>
     <color name="widget_title_color">#FF1B5E20</color>
     <color name="widget_subtitle_color">#FF424843</color>
     <color name="widget_status_color">#FF556B5C</color>
@@ -22,6 +22,9 @@
     <color name="widget_item_border">#FFE1E8E2</color>
     <color name="widget_income_color">#FF2E7D32</color>
     <color name="widget_expense_color">#FFD32F2F</color>
+    <color name="widget_cat_btn_bg">#FFE8EFE8</color>
+    <color name="widget_cat_btn_text">#FF1B5E20</color>
+    <color name="widget_cat_more_btn_bg">#FFEFEFEF</color>
+    <color name="widget_cat_more_btn_text">#FF424843</color>
     <color name="widget_category_badge_bg">#FFE8EFE8</color>
-    <color name="widget_category_badge_text">#FF1B5E20</color>
 </resources>

@@ -9,7 +9,6 @@ import com.example.FinTrackApp
 import com.example.data.local.entity.CategoryType
 import com.example.data.local.entity.TransactionEntity
 import com.example.data.local.entity.TransactionType
-import com.example.util.AmountFormatter
 import com.example.util.CategoryGuesser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
@@ -18,7 +17,12 @@ import kotlinx.coroutines.withContext
 object WidgetQuickRegister {
 
     suspend fun registerFromIntent(context: Context, intent: Intent) = withContext(Dispatchers.IO) {
-        val smsHash = intent.getStringExtra("extra_sms_hash") ?: return@withContext
+        val smsHash = intent.getStringExtra("extra_sms_hash")
+        if (smsHash.isNullOrBlank()) {
+            showErrorToast(context)
+            return@withContext
+        }
+
         val amount = intent.getLongExtra("extra_amount", 0L)
         val typeStr = intent.getStringExtra("extra_type") ?: TransactionType.EXPENSE.name
         val txType = try { TransactionType.valueOf(typeStr) } catch (e: Exception) { TransactionType.EXPENSE }
@@ -31,7 +35,7 @@ object WidgetQuickRegister {
             val app = context.applicationContext as? FinTrackApp
             val appModule = app?.appModule ?: com.example.di.AppModule(context.applicationContext)
 
-            // 1. Resolve Accounts
+            // 1. Resolve Account
             val allAccounts = appModule.accountRepository.getAllAccountsList()
             var matchedAccount = allAccounts.find { acc ->
                 (accountIdent.isNotBlank() && (
@@ -53,7 +57,7 @@ object WidgetQuickRegister {
             }
             val accountId = matchedAccount?.id ?: allAccounts.firstOrNull()?.id
 
-            // 2. Resolve Category with intelligent guessing
+            // 2. Resolve Category
             val allCategories = appModule.categoryRepository.allCategories.firstOrNull() ?: emptyList()
             val filteredCats = allCategories.filter {
                 when (txType) {
@@ -67,11 +71,15 @@ object WidgetQuickRegister {
             val explicitCategory = if (explicitCatId > 0) filteredCats.find { it.id == explicitCatId } else null
 
             val fullText = "$note $bankName $accountIdent"
-            val guessedCategory = CategoryGuesser.guessCategory(fullText, filteredCats)
-            val selectedCategory = explicitCategory ?: guessedCategory ?: filteredCats.firstOrNull()
+            val selectedCategory = explicitCategory ?: CategoryGuesser.resolveCategory(fullText, filteredCats, context, txType)
             val categoryId = selectedCategory?.id
 
-            // 3. Create and Save Transaction
+            // Save last used category for future predictions (gradual learning)
+            if (categoryId != null) {
+                CategoryGuesser.saveLastUsedCategory(context, txType, categoryId)
+            }
+
+            // 3. Build TransactionEntity
             val transaction = TransactionEntity(
                 type = txType,
                 amount = amount,
@@ -82,42 +90,63 @@ object WidgetQuickRegister {
                 smsHash = smsHash
             )
 
-            val result = appModule.addTransactionUseCase(transaction)
+            // 4. Check for open Dong settlement if this is an Income SMS
+            var isSavedSuccess = false
+            if (txType == TransactionType.INCOME) {
+                val matchingShares = try {
+                    appModule.groupExpenseRepository.findMatchingOpenShares(amount)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                val bestMatch = matchingShares.firstOrNull()
+                if (bestMatch != null) {
+                    try {
+                        appModule.groupExpenseRepository.settleShareWithIncomeTransaction(
+                            shareId = bestMatch.share.id,
+                            incomeTransaction = transaction
+                        )
+                        isSavedSuccess = true
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
 
-            if (result.isSuccess) {
-                // Remove from widget cache
+            if (!isSavedSuccess) {
+                val result = appModule.addTransactionUseCase(transaction)
+                isSavedSuccess = result.isSuccess
+            }
+
+            if (isSavedSuccess) {
+                // Remove item from unregistered widget items cache
                 val remaining = WidgetDataStore.removeItem(context, smsHash)
                 WidgetStatusHelper.saveScanResult(context, remaining.size)
                 WidgetStatusHelper.updateAllWidgets(context)
 
-                val catName = selectedCategory?.name?.let { "($it)" } ?: ""
-                val amountFormatted = AmountFormatter.formatAmountWithCurrency(amount)
-
+                val categoryName = selectedCategory?.name ?: intent.getStringExtra("extra_category_name") ?: "بدون دسته‌بندی"
                 Handler(Looper.getMainLooper()).post {
                     Toast.makeText(
                         context,
-                        "تراکنش $amountFormatted $catName ثبت شد ✅",
+                        "ثبت شد — $categoryName",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
             } else {
-                Handler(Looper.getMainLooper()).post {
-                    Toast.makeText(
-                        context,
-                        "خطا در ثبت تراکنش: ${result.exceptionOrNull()?.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                showErrorToast(context)
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            Handler(Looper.getMainLooper()).post {
-                Toast.makeText(
-                    context,
-                    "خطا در ثبت تراکنش: ${e.message}",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+            showErrorToast(context)
+        }
+    }
+
+    private fun showErrorToast(context: Context) {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                context,
+                "خطا در ثبت — اپ را باز کنید",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 }

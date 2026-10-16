@@ -39,10 +39,16 @@ class MainActivity : ComponentActivity() {
                     navigateToWidgetScan = navigateToWidgetScanState.value,
                     onThemeChanged = { newMode ->
                         themeModeState.value = newMode
+                        com.example.widget.WidgetStatusHelper.updateAllWidgets(this@MainActivity)
                     }
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        com.example.widget.WidgetStatusHelper.updateAllWidgets(this)
     }
 
     override fun onNewIntent(intent: android.content.Intent) {

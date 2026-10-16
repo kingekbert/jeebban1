@@ -160,6 +160,8 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
                 }
                 val accountId = matchedAccount?.id ?: allAccounts.firstOrNull()?.id
 
+                CategoryGuesser.saveLastUsedCategory(this@WidgetCategoryPickerActivity, txType, category.id)
+
                 val transaction = TransactionEntity(
                     type = txType,
                     amount = amount,
@@ -170,8 +172,33 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
                     smsHash = smsHash
                 )
 
-                val result = appModule.addTransactionUseCase(transaction)
-                if (result.isSuccess) {
+                var isSuccess = false
+                if (txType == TransactionType.INCOME) {
+                    val matchingShares = try {
+                        appModule.groupExpenseRepository.findMatchingOpenShares(amount)
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    val bestMatch = matchingShares.firstOrNull()
+                    if (bestMatch != null) {
+                        try {
+                            appModule.groupExpenseRepository.settleShareWithIncomeTransaction(
+                                shareId = bestMatch.share.id,
+                                incomeTransaction = transaction
+                            )
+                            isSuccess = true
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+
+                if (!isSuccess) {
+                    val result = appModule.addTransactionUseCase(transaction)
+                    isSuccess = result.isSuccess
+                }
+
+                if (isSuccess) {
                     val remaining = WidgetDataStore.removeItem(this@WidgetCategoryPickerActivity, smsHash)
                     WidgetStatusHelper.saveScanResult(this@WidgetCategoryPickerActivity, remaining.size)
                     WidgetStatusHelper.updateAllWidgets(this@WidgetCategoryPickerActivity)
@@ -179,7 +206,7 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                         Toast.makeText(
                             this@WidgetCategoryPickerActivity,
-                            "تراکنش ${AmountFormatter.formatAmountWithCurrency(amount)} (${category.name}) ثبت شد ✅",
+                            "ثبت شد — ${category.name}",
                             Toast.LENGTH_SHORT
                         ).show()
                         finish()
@@ -188,7 +215,7 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                         Toast.makeText(
                             this@WidgetCategoryPickerActivity,
-                            "خطا در ثبت: ${result.exceptionOrNull()?.message}",
+                            "خطا در ثبت — اپ را باز کنید",
                             Toast.LENGTH_SHORT
                         ).show()
                     }
