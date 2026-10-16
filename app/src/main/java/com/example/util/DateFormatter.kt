@@ -1,6 +1,7 @@
 package com.example.util
 
 object DateFormatter {
+    fun formatDate(timestamp: Long): String = formatMedium(timestamp)
     fun formatJalali(timestamp: Long): String = formatMedium(timestamp)
 
     fun formatShort(timestamp: Long): String {

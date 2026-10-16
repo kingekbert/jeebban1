@@ -1,6 +1,8 @@
 package com.example.ui.screens.group_expenses
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,9 +22,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -44,8 +50,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -67,8 +71,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.local.entity.AccountEntity
+import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.GroupExpenseShareEntity
-import com.example.data.local.entity.GroupExpenseShareMode
 import com.example.data.local.relation.GroupExpenseWithShares
 import com.example.ui.components.EmptyState
 import com.example.ui.theme.ExpenseColor
@@ -116,80 +121,145 @@ fun GroupExpensesScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Summary Cards Header
+            // Summary Cards Header - Always stays at top
             GroupExpenseSummaryHeader(
                 totalPending = state.totalPendingAmount,
                 pendingCount = state.pendingPeopleCount,
                 totalSettled = state.totalSettledAmount
             )
 
-            // Filter Tabs
+            // Primary Tabs: صورت‌حساب افراد (Item 1) vs لیست تمام هزینه‌ها
             TabRow(
-                selectedTabIndex = if (state.filterOnlyUnsettled) 0 else 1,
+                selectedTabIndex = state.selectedTab,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
                     .clip(RoundedCornerShape(12.dp))
             ) {
                 Tab(
-                    selected = state.filterOnlyUnsettled,
-                    onClick = { viewModel.setFilterOnlyUnsettled(true) },
-                    text = { Text("تسویه‌نشده‌ها (${state.pendingPeopleCount})", fontWeight = FontWeight.Medium) }
+                    selected = state.selectedTab == 0,
+                    onClick = { viewModel.setSelectedTab(0) },
+                    text = {
+                        Text(
+                            "صورت‌حساب افراد (${state.personSummaries.size})",
+                            fontWeight = if (state.selectedTab == 0) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
                 )
                 Tab(
-                    selected = !state.filterOnlyUnsettled,
-                    onClick = { viewModel.setFilterOnlyUnsettled(false) },
-                    text = { Text("همه هزینه‌ها", fontWeight = FontWeight.Medium) }
+                    selected = state.selectedTab == 1,
+                    onClick = { viewModel.setSelectedTab(1) },
+                    text = {
+                        Text(
+                            "لیست هزینه‌ها",
+                            fontWeight = if (state.selectedTab == 1) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
                 )
             }
 
-            // List of Group Expenses
-            if (state.groupExpenses.isEmpty()) {
-                EmptyState(
-                    title = if (state.filterOnlyUnsettled) "دنگ تسویه‌نشده‌ای وجود ندارد" else "هنوز هزینه مشترکی ثبت نشده است",
-                    icon = Icons.Default.Groups,
-                    modifier = Modifier.fillMaxSize()
-                )
+            if (state.selectedTab == 0) {
+                // Tab 0: صورت‌حساب هر شخص در هزینه‌های مشترک
+                if (state.personSummaries.isEmpty()) {
+                    EmptyState(
+                        title = "تمام دنگ‌ها تسویه شده‌اند و هیچ بدهی بازی وجود ندارد",
+                        icon = Icons.Default.Groups,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(
+                            items = state.personSummaries,
+                            key = { it.personName }
+                        ) { person ->
+                            PersonDebtCard(
+                                person = person,
+                                onSettlePerson = { viewModel.openSettleDialogForPerson(person) },
+                                onSettleDong = { dong ->
+                                    viewModel.openSettleDialogForShare(dong.shareEntity, dong.expenseWithShares)
+                                },
+                                onShareStatement = { viewModel.sharePersonStatement(context, person) },
+                                onShareSingleDong = { dong ->
+                                    viewModel.shareSingleDong(context, dong.expenseWithShares, dong.shareEntity)
+                                }
+                            )
+                        }
+                    }
+                }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                // Tab 1: لیست تمام هزینه‌ها
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    items(
-                        items = state.groupExpenses,
-                        key = { it.groupExpense.id }
-                    ) { expenseItem ->
-                        GroupExpenseCard(
-                            expense = expenseItem,
-                            onSettleShare = { share -> viewModel.openSettleDialog(share, expenseItem) },
-                            onUnsettleShare = { share -> viewModel.openUnsettleDialog(share) },
-                            onShareDong = { share -> viewModel.shareSingleDong(context, expenseItem, share) },
-                            onShareAll = { viewModel.shareAllDongs(context, expenseItem) }
+                    TextButton(
+                        onClick = { viewModel.setFilterOnlyUnsettled(!state.filterOnlyUnsettled) }
+                    ) {
+                        Text(
+                            text = if (state.filterOnlyUnsettled) "نمایش همه (شامل تسویه‌شده)" else "فقط تسویه‌نشده‌ها",
+                            style = MaterialTheme.typography.labelMedium
                         )
+                    }
+                }
+
+                if (state.groupExpenses.isEmpty()) {
+                    EmptyState(
+                        title = if (state.filterOnlyUnsettled) "دنگ تسویه‌نشده‌ای وجود ندارد" else "هنوز هزینه مشترکی ثبت نشده است",
+                        icon = Icons.Default.Groups,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(
+                            items = state.groupExpenses,
+                            key = { it.groupExpense.id }
+                        ) { expenseItem ->
+                            GroupExpenseCard(
+                                expense = expenseItem,
+                                onSettleShare = { share -> viewModel.openSettleDialogForShare(share, expenseItem) },
+                                onUnsettleShare = { share -> viewModel.openUnsettleDialog(share) },
+                                onShareDong = { share -> viewModel.shareSingleDong(context, expenseItem, share) },
+                                onShareAll = { viewModel.shareAllDongs(context, expenseItem) }
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    // Settle Share Dialog
-    state.settlingShare?.let { share ->
-        val expense = state.settlingExpense
-        SettleDongDialog(
-            share = share,
-            expense = expense,
+    // 3-Mode Settle Dialog (Item 2)
+    state.settleTarget?.let { target ->
+        ThreeModeSettleDialog(
+            target = target,
+            settleMode = state.settleMode,
             accounts = state.accounts,
+            categories = state.categories,
             selectedAccountId = state.selectedIncomeAccountId,
-            createIncomeTx = state.createIncomeTransaction,
+            selectedCategoryId = state.selectedCategoryId,
+            partialAmountInput = state.partialAmountInput,
+            createIncomeInPartial = state.createIncomeInPartial,
+            onSetSettleMode = { viewModel.setSettleMode(it) },
             onSelectAccount = { viewModel.setSelectedIncomeAccountId(it) },
-            onToggleCreateIncome = { viewModel.setCreateIncomeTransaction(it) },
-            onConfirm = { viewModel.confirmSettleShare() },
+            onSelectCategory = { viewModel.setSelectedCategoryId(it) },
+            onSetPartialAmount = { viewModel.setPartialAmountInput(it) },
+            onSetCreateIncomeInPartial = { viewModel.setCreateIncomeInPartial(it) },
+            onConfirm = { viewModel.confirmSettle() },
             onDismiss = { viewModel.closeSettleDialog() }
         )
     }
 
-    // Unsettle Share Dialog
+    // Unsettle Share Dialog (لغو تسویه با قابلیت حذف تراکنش درآمدی مرتبط)
     state.unsettlingShare?.let { share ->
         AlertDialog(
             onDismissRequest = { viewModel.closeUnsettleDialog() },
@@ -230,6 +300,609 @@ fun GroupExpensesScreen(
                 }
             }
         )
+    }
+}
+
+/**
+ * کارت صورت‌حساب هر شخص در هزینه‌های مشترک (مورد ۱)
+ */
+@Composable
+fun PersonDebtCard(
+    person: PersonDebtSummary,
+    onSettlePerson: () -> Unit,
+    onSettleDong: (PersonOpenDong) -> Unit,
+    onShareStatement: () -> Unit,
+    onShareSingleDong: (PersonOpenDong) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Header: Avatar, Name, Open dongs count, Total Debt
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = person.personName.firstOrNull()?.toString() ?: "؟",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = person.personName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "${person.openDongsCount} دنگ پرداخت‌نشده",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Debt amount
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "جمع کل بدهی",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = AmountFormatter.formatAmountWithCurrency(person.totalDebt),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = ExpenseColor
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Action row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onSettlePerson,
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("تسویه حساب", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    }
+
+                    IconButton(
+                        onClick = onShareStatement,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "ارسال صورت‌حساب",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { expanded = !expanded }
+                ) {
+                    Text(
+                        text = if (expanded) "بستن ریز دنگ‌ها" else "مشاهده ریز دنگ‌ها",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            // Expanded Open Dongs List (تاریخ + توضیح تراکنش اصلی + مبلغ هرکدام)
+            AnimatedVisibility(visible = expanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    Text(
+                        text = "دنگ‌های باز ${person.personName}:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    person.openDongs.forEach { dong ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = dong.parentNote,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = DateFormatter.formatDate(dong.transactionDate),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = AmountFormatter.formatAmountWithCurrency(dong.amount),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ExpenseColor
+                                    )
+
+                                    OutlinedButton(
+                                        onClick = { onSettleDong(dong) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("تسویه", style = MaterialTheme.typography.labelSmall)
+                                    }
+
+                                    IconButton(
+                                        onClick = { onShareSingleDong(dong) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "اشتراک",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * دیالوگ تسویه سه‌حالته (مورد ۲)
+ * ① تسویه با تراکنش واریز
+ * ② تسویه بدون تراکنش
+ * ③ تسویه جزئی (با پیش‌نمایش دنگ‌های تسویه‌شونده و بررسی خطا)
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ThreeModeSettleDialog(
+    target: SettleTarget,
+    settleMode: SettleMode,
+    accounts: List<AccountEntity>,
+    categories: List<CategoryEntity>,
+    selectedAccountId: Long?,
+    selectedCategoryId: Long?,
+    partialAmountInput: String,
+    createIncomeInPartial: Boolean,
+    onSetSettleMode: (SettleMode) -> Unit,
+    onSelectAccount: (Long) -> Unit,
+    onSelectCategory: (Long?) -> Unit,
+    onSetPartialAmount: (String) -> Unit,
+    onSetCreateIncomeInPartial: (Boolean) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var expandedAccountDropdown by remember { mutableStateOf(false) }
+    var expandedCategoryDropdown by remember { mutableStateOf(false) }
+
+    val selectedAccount = accounts.find { it.id == selectedAccountId } ?: accounts.firstOrNull()
+    val incomeCategories = remember(categories) {
+        categories.filter { it.type == com.example.data.local.entity.CategoryType.INCOME }
+    }
+    val selectedCategory = categories.find { it.id == selectedCategoryId }
+
+    val partialAmountLong = partialAmountInput.filter { it.isDigit() }.toLongOrNull() ?: 0L
+    val isAmountOverDebt = partialAmountLong > target.totalDebt
+    val debtDifference = if (isAmountOverDebt) partialAmountLong - target.totalDebt else 0L
+
+    // Simulate partial preview for Mode 3
+    val partialPreviews = remember(partialAmountLong, target.openDongs) {
+        val list = mutableListOf<Pair<PersonOpenDong, String>>()
+        var rem = partialAmountLong
+        target.openDongs.forEach { dong ->
+            if (rem <= 0) {
+                list.add(dong to "بدون تغییر")
+            } else if (rem >= dong.amount) {
+                list.add(dong to "تسویه کامل (${AmountFormatter.formatAmountWithCurrency(dong.amount)})")
+                rem -= dong.amount
+            } else {
+                list.add(dong to "تسویه جزئی: ${AmountFormatter.formatAmountWithCurrency(rem)} (باقیمانده: ${AmountFormatter.formatAmountWithCurrency(dong.amount - rem)})")
+                rem = 0L
+            }
+        }
+        list
+    }
+
+    val isConfirmEnabled = when (settleMode) {
+        SettleMode.WITH_TRANSACTION -> selectedAccount != null
+        SettleMode.WITHOUT_TRANSACTION -> true
+        SettleMode.PARTIAL -> partialAmountLong > 0 && !isAmountOverDebt && (!createIncomeInPartial || selectedAccount != null)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = IncomeColor,
+                    modifier = Modifier.size(36.dp)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = if (target.isForPerson) "تسویه حساب «${target.personName}»" else "تسویه دنگ «${target.personName}»",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "کل مبلغ بدهی: ${AmountFormatter.formatAmountWithCurrency(target.totalDebt)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Mode 1: تسویه با تراکنش واریز
+                SettleOptionCard(
+                    title = "① تسویه با تراکنش واریز",
+                    subtitle = "ثبت تراکنش درآمد و افزایش موجودی حساب",
+                    isSelected = settleMode == SettleMode.WITH_TRANSACTION,
+                    onClick = { onSetSettleMode(SettleMode.WITH_TRANSACTION) }
+                )
+
+                if (settleMode == SettleMode.WITH_TRANSACTION) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Account Selector
+                        ExposedDropdownMenuBox(
+                            expanded = expandedAccountDropdown,
+                            onExpandedChange = { expandedAccountDropdown = it }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedAccount?.name ?: "انتخاب حساب...",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("واریز به حساب") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAccountDropdown) },
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedAccountDropdown,
+                                onDismissRequest = { expandedAccountDropdown = false }
+                            ) {
+                                accounts.forEach { acc ->
+                                    DropdownMenuItem(
+                                        text = { Text(acc.name) },
+                                        onClick = {
+                                            onSelectAccount(acc.id)
+                                            expandedAccountDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Optional Category Selector
+                        ExposedDropdownMenuBox(
+                            expanded = expandedCategoryDropdown,
+                            onExpandedChange = { expandedCategoryDropdown = it }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedCategory?.name ?: "دسته‌بندی اختیاری (پیش‌فرض: تسویه دنگ)",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("دسته‌بندی (اختیاری)") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCategoryDropdown) },
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedCategoryDropdown,
+                                onDismissRequest = { expandedCategoryDropdown = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("بدون دسته‌بندی خاص") },
+                                    onClick = {
+                                        onSelectCategory(null)
+                                        expandedCategoryDropdown = false
+                                    }
+                                )
+                                incomeCategories.forEach { cat ->
+                                    DropdownMenuItem(
+                                        text = { Text(cat.name) },
+                                        onClick = {
+                                            onSelectCategory(cat.id)
+                                            expandedCategoryDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Mode 2: تسویه بدون تراکنش
+                SettleOptionCard(
+                    title = "② تسویه بدون تراکنش",
+                    subtitle = "بدون ثبت هیچ تراکنش مالی (برای وقتی دوست به‌جای واریز، دفعه بعد هزینه را حساب می‌کند)",
+                    isSelected = settleMode == SettleMode.WITHOUT_TRANSACTION,
+                    onClick = { onSetSettleMode(SettleMode.WITHOUT_TRANSACTION) }
+                )
+
+                // Mode 3: تسویه جزئی
+                SettleOptionCard(
+                    title = "③ تسویه جزئی",
+                    subtitle = "تسویه از قدیمی‌ترین دنگ تا سقف مبلغ وارد شده",
+                    isSelected = settleMode == SettleMode.PARTIAL,
+                    onClick = { onSetSettleMode(SettleMode.PARTIAL) }
+                )
+
+                if (settleMode == SettleMode.PARTIAL) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = partialAmountInput,
+                            onValueChange = onSetPartialAmount,
+                            label = { Text("مبلغ تسویه جزئی (تومان)") },
+                            singleLine = true,
+                            isError = isAmountOverDebt,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        // Error if amount > total debt with difference amount
+                        if (isAmountOverDebt) {
+                            Text(
+                                text = "مبلغ وارد شده بیشتر از کل بدهی است (اختلاف: ${AmountFormatter.formatAmountWithCurrency(debtDifference)})",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Preview of which dongs will be settled
+                        if (partialAmountLong > 0 && !isAmountOverDebt) {
+                            Text(
+                                text = "پیش‌نمایش دنگ‌هایی که تسویه می‌شوند:",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                    .padding(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                partialPreviews.forEach { (dong, status) ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = dong.parentNote,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(
+                                            text = status,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (status.startsWith("تسویه")) IncomeColor else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Checkbox to create income transaction in partial mode
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSetCreateIncomeInPartial(!createIncomeInPartial) },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = createIncomeInPartial,
+                                    onCheckedChange = { onSetCreateIncomeInPartial(it) }
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("ثبت به عنوان تراکنش واریز در حساب", style = MaterialTheme.typography.bodySmall)
+                            }
+
+                            if (createIncomeInPartial) {
+                                ExposedDropdownMenuBox(
+                                    expanded = expandedAccountDropdown,
+                                    onExpandedChange = { expandedAccountDropdown = it }
+                                ) {
+                                    OutlinedTextField(
+                                        value = selectedAccount?.name ?: "انتخاب حساب...",
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        label = { Text("واریز به حساب") },
+                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAccountDropdown) },
+                                        modifier = Modifier
+                                            .menuAnchor()
+                                            .fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    ExposedDropdownMenu(
+                                        expanded = expandedAccountDropdown,
+                                        onDismissRequest = { expandedAccountDropdown = false }
+                                    ) {
+                                        accounts.forEach { acc ->
+                                            DropdownMenuItem(
+                                                text = { Text(acc.name) },
+                                                onClick = {
+                                                    onSelectAccount(acc.id)
+                                                    expandedAccountDropdown = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = isConfirmEnabled,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = IncomeColor)
+            ) {
+                Text("تأیید تسویه", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("انصراف")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SettleOptionCard(
+    title: String,
+    subtitle: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        ),
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                contentDescription = null,
+                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+            }
+        }
     }
 }
 
@@ -298,17 +971,16 @@ fun GroupExpenseSummaryHeader(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "مجموع مبالغ تسویه شده:",
+                    text = "مجموع تسویه‌شده تا کنون:",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = AmountFormatter.formatAmountWithCurrency(totalSettled),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     color = IncomeColor
                 )
@@ -323,18 +995,19 @@ fun GroupExpenseCard(
     onSettleShare: (GroupExpenseShareEntity) -> Unit,
     onUnsettleShare: (GroupExpenseShareEntity) -> Unit,
     onShareDong: (GroupExpenseShareEntity) -> Unit,
-    onShareAll: () -> Unit
+    onShareAll: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val tx = expense.transaction
     val title = tx?.note?.ifBlank { "هزینه مشترک" } ?: "هزینه مشترک"
-    val dateStr = tx?.date?.let { DateFormatter.formatMedium(it) } ?: ""
-    val totalAmount = tx?.amount ?: 0L
+    val dateStr = tx?.date?.let { DateFormatter.formatDate(it) } ?: DateFormatter.formatDate(expense.groupExpense.createdAt)
+    val totalAmount = tx?.amount ?: expense.shares.sumOf { it.amount }
 
-    val settledCount = expense.shares.count { it.isSettled }
-    val totalCount = expense.shares.size
+    val pendingCount = expense.shares.count { !it.isSettled }
+    val allSettled = expense.shares.isNotEmpty() && pendingCount == 0
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -342,10 +1015,8 @@ fun GroupExpenseCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(16.dp)
         ) {
-            // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -365,122 +1036,83 @@ fun GroupExpenseCard(
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SuggestionChip(
-                        onClick = {},
-                        label = {
-                            Text(
-                                text = if (expense.groupExpense.shareMode == GroupExpenseShareMode.EQUAL) "مساوی" else "دلخواه",
-                                fontSize = 11.sp
-                            )
-                        },
-                        colors = SuggestionChipDefaults.suggestionChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = AmountFormatter.formatAmountWithCurrency(totalAmount),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    IconButton(onClick = onShareAll) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "اشتراک صورت‌حساب",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                    if (allSettled) {
+                        Text(
+                            text = "کاملاً تسویه شده ✓",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = IncomeColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        Text(
+                            text = "$pendingCount دنگ باز",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ExpenseColor
                         )
                     }
                 }
             }
 
-            // Total Amount Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "کل هزینه: ${AmountFormatter.formatAmountWithCurrency(totalAmount)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "$settledCount از $totalCount تسویه شد",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (settledCount == totalCount) IncomeColor else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
+            Spacer(modifier = Modifier.height(10.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Shares list
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 expense.shares.forEach { share ->
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(
-                                if (share.isSettled) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-                            )
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Person,
                                 contentDescription = null,
-                                tint = if (share.isSettled) IncomeColor else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = share.personName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = AmountFormatter.formatAmountWithCurrency(share.amount),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (share.isSettled) IncomeColor else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = share.personName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Share button for individual dong
-                            IconButton(
-                                onClick = { onShareDong(share) },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Share,
-                                    contentDescription = "ارسال پیام دنگ",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = AmountFormatter.formatAmountWithCurrency(share.amount),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
 
-                            Spacer(modifier = Modifier.width(4.dp))
-
-                            // Status / Settle Action
                             if (share.isSettled) {
-                                OutlinedButton(
-                                    onClick = { onUnsettleShare(share) },
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = IncomeColor)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(IncomeColor.copy(alpha = 0.12f))
+                                        .clickable { onUnsettleShare(share) }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.CheckCircle,
                                         contentDescription = null,
+                                        tint = IncomeColor,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("تسویه شده", fontSize = 12.sp)
+                                    Text("تسویه شده", fontSize = 12.sp, color = IncomeColor, fontWeight = FontWeight.Bold)
                                 }
                             } else {
                                 Button(
@@ -492,123 +1124,35 @@ fun GroupExpenseCard(
                                     Text("دریافت دنگ", fontSize = 12.sp)
                                 }
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettleDongDialog(
-    share: GroupExpenseShareEntity,
-    expense: GroupExpenseWithShares?,
-    accounts: List<com.example.data.local.entity.AccountEntity>,
-    selectedAccountId: Long?,
-    createIncomeTx: Boolean,
-    onSelectAccount: (Long) -> Unit,
-    onToggleCreateIncome: (Boolean) -> Unit,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    var expandedAccountDropdown by remember { mutableStateOf(false) }
-    val selectedAccount = accounts.find { it.id == selectedAccountId } ?: accounts.firstOrNull()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                imageVector = Icons.Default.CheckCircle,
-                contentDescription = null,
-                tint = IncomeColor,
-                modifier = Modifier.size(36.dp)
-            )
-        },
-        title = {
-            Text(
-                text = "پس گرفتن دنگ",
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "دنگ «${share.personName}» را پس گرفتی؟ مبلغ ${AmountFormatter.formatAmountWithCurrency(share.amount)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                // Option to create income transaction
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onToggleCreateIncome(!createIncomeTx) },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = createIncomeTx,
-                        onCheckedChange = { onToggleCreateIncome(it) }
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "ثبت به عنوان تراکنش درآمد در حساب",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                if (createIncomeTx) {
-                    ExposedDropdownMenuBox(
-                        expanded = expandedAccountDropdown,
-                        onExpandedChange = { expandedAccountDropdown = it }
-                    ) {
-                        OutlinedTextField(
-                            value = selectedAccount?.name ?: "انتخاب حساب...",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("واریز به حساب") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAccountDropdown) },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expandedAccountDropdown,
-                            onDismissRequest = { expandedAccountDropdown = false }
-                        ) {
-                            accounts.forEach { acc ->
-                                DropdownMenuItem(
-                                    text = { Text(acc.name) },
-                                    onClick = {
-                                        onSelectAccount(acc.id)
-                                        expandedAccountDropdown = false
-                                    }
+                            IconButton(
+                                onClick = { onShareDong(share) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "ارسال دنگ",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onShareAll,
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = IncomeColor)
+                contentPadding = PaddingValues(vertical = 6.dp)
             ) {
-                Text("تأیید تسویه")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
+                Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("ارسال صورت‌حساب کامل برای همه", style = MaterialTheme.typography.labelMedium)
             }
         }
-    )
+    }
 }

@@ -241,16 +241,43 @@ fun PreConfirmScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = dong.personName,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    if (!dong.isExact) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .clip(RoundedCornerShape(4.dp))
+                                                                .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f))
+                                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = "مبلغ کمی متفاوت است",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.error,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(2.dp))
                                                 Text(
-                                                    text = "این واریز به نظر دنگ باز ${dong.personName} برای «${dong.parentNote}» است (${AmountFormatter.formatAmountWithCurrency(dong.amount)})",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                    text = "بابت «${dong.parentNote}» (مبلغ دنگ: ${AmountFormatter.formatAmountWithCurrency(dong.amount)})",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
                                             if (isSelected) {
                                                 Icon(
                                                     imageVector = Icons.Default.Check,
-                                                    contentDescription = null,
+                                                    contentDescription = "انتخاب شده",
                                                     tint = MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.size(20.dp)
                                                 )

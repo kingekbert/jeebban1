@@ -19,7 +19,7 @@ android {
   }
 
   base {
-    archivesName.set("jeebban")
+    archivesName.set("Jeebban")
   }
 
   val debugKeystoreFile = file("${rootDir}/debug.keystore")

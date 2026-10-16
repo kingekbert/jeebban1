@@ -584,7 +584,8 @@ fun NavGraph(
                 val viewModel: com.example.ui.screens.group_expenses.GroupExpensesViewModel = viewModel(
                     factory = com.example.ui.screens.group_expenses.GroupExpensesViewModel.Factory(
                         groupExpenseRepository = app.appModule.groupExpenseRepository,
-                        accountRepository = app.appModule.accountRepository
+                        accountRepository = app.appModule.accountRepository,
+                        categoryRepository = app.appModule.categoryRepository
                     )
                 )
                 com.example.ui.screens.group_expenses.GroupExpensesScreen(
@@ -654,12 +655,19 @@ fun NavGraph(
                     factory = AccountDetailViewModel.Factory(
                         accountId = accountId,
                         accountRepository = app.appModule.accountRepository,
-                        transactionRepository = app.appModule.transactionRepository
+                        transactionRepository = app.appModule.transactionRepository,
+                        smsPatternRepository = app.appModule.smsPatternRepository
                     )
                 )
                 AccountDetailScreen(
                     viewModel = viewModel,
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToEditPattern = { accId, patId ->
+                        navController.navigate(Screen.PatternLearner.createRoute(accountId = accId, patternId = patId))
+                    },
+                    onNavigateToAddPattern = { accId ->
+                        navController.navigate(Screen.PatternLearner.createRoute(accountId = accId))
+                    }
                 )
             }
 

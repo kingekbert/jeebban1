@@ -52,6 +52,7 @@ data class FinancialInsight(
 
 data class ReportsUiState(
     val selectedPeriod: DateFilterPeriod = DateFilterPeriod.ALL,
+    val selectedDayTimestamp: Long? = null,
     val customStartTimestamp: Long? = null,
     val customEndTimestamp: Long? = null,
     val selectedAccountId: Long? = null,
@@ -76,6 +77,7 @@ data class ReportsUiState(
         get() {
             var count = 0
             if (selectedPeriod != DateFilterPeriod.ALL) count++
+            if (selectedDayTimestamp != null) count++
             if (selectedAccountId != null) count++
             if (selectedCategoryIds.isNotEmpty()) count++
             if (selectedType != null) count++
@@ -95,6 +97,7 @@ class ReportsViewModel(
     private val _selectedType = MutableStateFlow<TransactionType?>(null)
     private val _customStartTimestamp = MutableStateFlow<Long?>(null)
     private val _customEndTimestamp = MutableStateFlow<Long?>(null)
+    private val _selectedDayTimestamp = MutableStateFlow<Long?>(null)
     private val _isFullscreen = MutableStateFlow(false)
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -106,6 +109,7 @@ class ReportsViewModel(
         _customStartTimestamp,
         _customEndTimestamp,
         _isFullscreen,
+        _selectedDayTimestamp,
         accountRepository.allAccounts,
         categoryRepository.allCategories,
         transactionRepository.allTransactionsWithDetails
@@ -119,12 +123,13 @@ class ReportsViewModel(
         val customStart = flows[4] as Long?
         val customEnd = flows[5] as Long?
         val isFullscreen = flows[6] as Boolean
+        val selectedDay = flows[7] as Long?
         @Suppress("UNCHECKED_CAST")
-        val accountsList = flows[7] as List<AccountEntity>
+        val accountsList = flows[8] as List<AccountEntity>
         @Suppress("UNCHECKED_CAST")
-        val categoriesList = flows[8] as List<CategoryEntity>
+        val categoriesList = flows[9] as List<CategoryEntity>
         @Suppress("UNCHECKED_CAST")
-        val allTxWithDetails = flows[9] as List<TransactionWithDetails>
+        val allTxWithDetails = flows[10] as List<TransactionWithDetails>
 
         val zoneId = ZoneId.systemDefault()
         val todayJalali = JalaliDate.today(zoneId)
@@ -153,7 +158,13 @@ class ReportsViewModel(
 
         val inRange = allTxWithDetails.filter { item ->
             val d = item.transaction.date
-            val inDateRange = d in start..end
+            val matchesDay = if (selectedDay != null) {
+                val dayJalali = JalaliDate.fromTimestamp(selectedDay, zoneId)
+                val dayStart = dayJalali.toStartOfDayTimestamp(zoneId)
+                val dayEnd = dayJalali.toEndOfDayTimestamp(zoneId)
+                d in dayStart..dayEnd
+            } else true
+            val inDateRange = if (selectedDay != null) matchesDay else (d in start..end)
             val inAccount = (accountId == null || item.transaction.accountId == accountId || item.transaction.toAccountId == accountId)
             val inCategory = (categoryIds.isEmpty() || (item.transaction.categoryId != null && categoryIds.contains(item.transaction.categoryId)))
             val inType = (filterType == null || item.transaction.type == filterType)
@@ -327,6 +338,7 @@ class ReportsViewModel(
             selectedAccountId = accountId,
             selectedCategoryIds = categoryIds,
             selectedType = filterType,
+            selectedDayTimestamp = selectedDay,
             isFullscreen = isFullscreen,
             accounts = accountsList,
             categories = categoriesList,
@@ -376,11 +388,20 @@ class ReportsViewModel(
 
     fun resetFilters() {
         _selectedPeriod.value = DateFilterPeriod.ALL
+        _selectedDayTimestamp.value = null
         _customStartTimestamp.value = null
         _customEndTimestamp.value = null
         _selectedAccountId.value = null
         _selectedCategoryIds.value = emptySet()
         _selectedType.value = null
+    }
+
+    fun setDayFilter(timestamp: Long) {
+        _selectedDayTimestamp.value = timestamp
+    }
+
+    fun clearDayFilter() {
+        _selectedDayTimestamp.value = null
     }
 
     fun setPeriod(period: DateFilterPeriod) {

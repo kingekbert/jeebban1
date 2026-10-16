@@ -295,9 +295,8 @@ fun JalaliDatePickerBottomSheet(
                 OutlinedButton(
                     onClick = {
                         val today = JalaliDate.today()
-                        selectedYear = today.year
-                        selectedMonth = today.month
-                        selectedDay = today.day
+                        onDateSelected(today.toStartOfDayTimestamp())
+                        onDismiss()
                     },
                     shape = RoundedCornerShape(8.dp)
                 ) {
@@ -415,7 +414,12 @@ fun JalaliDatePickerBottomSheet(
                                             color = if (isToday && !isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                                             shape = CircleShape
                                         )
-                                        .clickable { selectedDay = day },
+                                        .clickable {
+                                            selectedDay = day
+                                            val jalali = JalaliDate(selectedYear, selectedMonth, day)
+                                            onDateSelected(jalali.toStartOfDayTimestamp())
+                                            onDismiss()
+                                        },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(

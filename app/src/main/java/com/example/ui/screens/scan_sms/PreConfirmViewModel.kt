@@ -26,7 +26,9 @@ data class MatchedDong(
     val shareId: Long,
     val personName: String,
     val amount: Long,
-    val parentNote: String
+    val parentNote: String,
+    val isExact: Boolean = true,
+    val diffPercent: Double = 0.0
 )
 
 data class PreConfirmUiState(
@@ -148,12 +150,14 @@ class PreConfirmViewModel(
         viewModelScope.launch {
             try {
                 val matches = groupExpenseRepository.findMatchingOpenShares(amount)
-                val mapped = matches.map { (share, parentNote) ->
+                val mapped = matches.map { result ->
                     MatchedDong(
-                        shareId = share.id,
-                        personName = share.personName,
-                        amount = share.amount,
-                        parentNote = parentNote
+                        shareId = result.share.id,
+                        personName = result.share.personName,
+                        amount = result.share.amount,
+                        parentNote = result.parentNote,
+                        isExact = result.isExact,
+                        diffPercent = result.diffPercent
                     )
                 }
                 _uiState.update {

@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "JeebBan"
+rootProject.name = "Jeebban"
 
 include(":app")

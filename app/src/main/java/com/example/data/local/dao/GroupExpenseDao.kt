@@ -34,6 +34,10 @@ interface GroupExpenseDao {
     fun getAllWithShares(): Flow<List<GroupExpenseWithShares>>
 
     @Transaction
+    @Query("SELECT * FROM group_expenses ORDER BY createdAt ASC")
+    suspend fun getAllWithSharesList(): List<GroupExpenseWithShares>
+
+    @Transaction
     @Query("SELECT * FROM group_expenses WHERE transactionId = :transactionId LIMIT 1")
     suspend fun getByTransactionId(transactionId: Long): GroupExpenseWithShares?
 

@@ -53,6 +53,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
+import com.example.ui.components.JalaliDatePickerBottomSheet
+import com.example.util.JalaliDate
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.CategoryType
 import com.example.util.CsvExporter
@@ -98,6 +104,7 @@ fun ReportsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showFilterBottomSheet by remember { mutableStateOf(false) }
+    var showDatePickerBottomSheet by remember { mutableStateOf(false) }
     var editingCategoryBudget by remember { mutableStateOf<CategoryEntity?>(null) }
 
     LaunchedEffect(state.isFullscreen) {
@@ -108,6 +115,17 @@ fun ReportsScreen(
         onDispose {
             onToggleFullscreen(false)
         }
+    }
+
+    if (showDatePickerBottomSheet) {
+        JalaliDatePickerBottomSheet(
+            initialTimestamp = state.selectedDayTimestamp ?: System.currentTimeMillis(),
+            onDateSelected = { timestamp ->
+                viewModel.setDayFilter(timestamp)
+                showDatePickerBottomSheet = false
+            },
+            onDismiss = { showDatePickerBottomSheet = false }
+        )
     }
 
     if (showFilterBottomSheet) {
@@ -138,6 +156,26 @@ fun ReportsScreen(
             TopAppBar(
                 title = { Text("گزارش‌های مالی", fontWeight = FontWeight.Bold) },
                 actions = {
+                    BadgedBox(
+                        badge = {
+                            if (state.selectedDayTimestamp != null) {
+                                Badge(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(8.dp)
+                                )
+                            }
+                        }
+                    ) {
+                        IconButton(
+                            onClick = { showDatePickerBottomSheet = true }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.CalendarMonth,
+                                contentDescription = "تقویم روزانه",
+                                tint = if (state.selectedDayTimestamp != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     BadgedBox(
                         badge = {
                             if (state.activeFilterCount > 0) {
@@ -186,6 +224,42 @@ fun ReportsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // Day Filter Chip
+            if (state.selectedDayTimestamp != null) {
+                val dayFormatted = JalaliDate.fromTimestamp(state.selectedDayTimestamp!!).format(includeDayName = true)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    InputChip(
+                        selected = true,
+                        onClick = { viewModel.clearDayFilter() },
+                        label = {
+                            Text(
+                                text = "فیلتر روز: $dayFormatted",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "حذف فیلتر روز",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        colors = InputChipDefaults.inputChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            }
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),

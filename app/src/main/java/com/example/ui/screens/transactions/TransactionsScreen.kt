@@ -38,8 +38,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
+import com.example.ui.components.JalaliDatePickerBottomSheet
+import com.example.util.JalaliDate
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -88,6 +91,8 @@ import com.example.data.local.entity.TransactionType
 import com.example.data.local.relation.TransactionWithDetails
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CardDefaults
 import com.example.ui.components.FilterBottomSheet
 import com.example.ui.components.TransactionCard
 import com.example.ui.components.getCategoryIcon
@@ -117,6 +122,7 @@ fun TransactionsScreen(
     var transactionToDelete by remember { mutableStateOf<TransactionEntity?>(null) }
     var showFilterBottomSheet by remember { mutableStateOf(false) }
     var showSortBottomSheet by remember { mutableStateOf(false) }
+    var showDatePickerBottomSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.isFullscreen) {
         onToggleFullscreen(state.isFullscreen)
@@ -126,6 +132,17 @@ fun TransactionsScreen(
         onDispose {
             onToggleFullscreen(false)
         }
+    }
+
+    if (showDatePickerBottomSheet) {
+        JalaliDatePickerBottomSheet(
+            initialTimestamp = state.selectedDayTimestamp ?: System.currentTimeMillis(),
+            onDateSelected = { timestamp ->
+                viewModel.setDayFilter(timestamp)
+                showDatePickerBottomSheet = false
+            },
+            onDismiss = { showDatePickerBottomSheet = false }
+        )
     }
 
     if (showFilterBottomSheet) {
@@ -271,6 +288,26 @@ fun TransactionsScreen(
                         }
                         BadgedBox(
                             badge = {
+                                if (state.selectedDayTimestamp != null) {
+                                    Badge(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(8.dp)
+                                    )
+                                }
+                            }
+                        ) {
+                            IconButton(
+                                onClick = { showDatePickerBottomSheet = true }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.CalendarMonth,
+                                    contentDescription = "تقویم روزانه",
+                                    tint = if (state.selectedDayTimestamp != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        BadgedBox(
+                            badge = {
                                 if (state.activeFilterCount > 0) {
                                     Badge {
                                         Text(state.activeFilterCount.toString().toPersianDigits())
@@ -346,6 +383,42 @@ fun TransactionsScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
+                // Day Filter Chip
+                if (state.selectedDayTimestamp != null) {
+                    val dayFormatted = JalaliDate.fromTimestamp(state.selectedDayTimestamp!!).format(includeDayName = true)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        InputChip(
+                            selected = true,
+                            onClick = { viewModel.clearDayFilter() },
+                            label = {
+                                Text(
+                                    text = "فیلتر روز: $dayFormatted",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "حذف فیلتر روز",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            colors = InputChipDefaults.inputChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+
                 // Grouped Transaction List
                 if (state.groupedTransactions.isEmpty()) {
                     Box(
