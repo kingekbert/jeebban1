@@ -57,6 +57,7 @@
                 <action android:name="com.example.widget.ACTION_TRIGGER_SCAN" />
                 <action android:name="com.example.widget.ACTION_ITEM_CLICK" />
                 <action android:name="com.example.widget.ACTION_REGISTER_ITEM" />
+                <action android:name="com.example.widget.ACTION_TOGGLE_THEME" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

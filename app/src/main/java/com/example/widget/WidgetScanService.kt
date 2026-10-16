@@ -78,12 +78,26 @@ class WidgetScanViewsFactory(private val context: Context) : RemoteViewsService.
             else it.type == CategoryType.EXPENSE || it.type == CategoryType.BOTH
         }
 
-        // Starred categories (up to 4)
-        val starredCategories = matchingCategories.filter { it.isFavorite }.take(4)
+        // Prioritize starred categories, then fill with remaining categories up to 9
+        val starredCategories = matchingCategories.filter { it.isFavorite }
+        val nonStarredCategories = matchingCategories.filter { !it.isFavorite }
+        val displayCategories = (starredCategories + nonStarredCategories).take(9)
+
+        val isDark = WidgetStatusHelper.isDarkThemeActive(context)
 
         val views = RemoteViews(context.packageName, R.layout.widget_sms_item)
 
+        // Apply theme-specific container and text colors
+        val itemBgRes = if (isDark) R.drawable.widget_item_bg_dark else R.drawable.widget_item_bg_light
+        views.setInt(R.id.widget_item_container, "setBackgroundResource", itemBgRes)
+
+        val bankColor = if (isDark) 0xFFE0E0E0.toInt() else 0xFF1B5E20.toInt()
+        val noteColor = if (isDark) 0xFFA0A0A0.toInt() else 0xFF424843.toInt()
+        val dateColor = if (isDark) 0xFFB0B0B0.toInt() else 0xFF556B5C.toInt()
+
         views.setTextViewText(R.id.tv_item_bank, bankFullText)
+        views.setTextColor(R.id.tv_item_bank, bankColor)
+
         views.setTextViewText(R.id.tv_item_type, typeText)
         views.setTextColor(R.id.tv_item_type, ContextCompat.getColor(context, amountColorRes))
 
@@ -91,7 +105,10 @@ class WidgetScanViewsFactory(private val context: Context) : RemoteViewsService.
         views.setTextColor(R.id.tv_item_amount, ContextCompat.getColor(context, amountColorRes))
 
         views.setTextViewText(R.id.tv_item_date, dateText)
+        views.setTextColor(R.id.tv_item_date, dateColor)
+
         views.setTextViewText(R.id.tv_item_note, noteText)
+        views.setTextColor(R.id.tv_item_note, noteColor)
 
         // Helper function to create intent for clicking a category button
         fun createRegisterIntent(cat: CategoryEntity): Intent {
@@ -109,23 +126,42 @@ class WidgetScanViewsFactory(private val context: Context) : RemoteViewsService.
             }
         }
 
-        // Configure Up to 4 Starred Category Buttons
-        val favButtons = listOf(R.id.btn_fav_1, R.id.btn_fav_2, R.id.btn_fav_3, R.id.btn_fav_4)
-        for (i in favButtons.indices) {
-            val btnId = favButtons[i]
-            if (i < starredCategories.size) {
-                val cat = starredCategories[i]
+        val catBtnBg = if (isDark) R.drawable.widget_cat_btn_bg_dark else R.drawable.widget_cat_btn_bg_light
+        val catBtnTextColor = if (isDark) 0xFF81C784.toInt() else 0xFF1B5E20.toInt()
+        val moreBtnBg = if (isDark) R.drawable.widget_cat_more_btn_bg_dark else R.drawable.widget_cat_more_btn_bg_light
+        val moreBtnTextColor = if (isDark) 0xFFE0E0E0.toInt() else 0xFF424843.toInt()
+
+        // Configure 9 Category Buttons in 2 Rows
+        val catButtonIds = listOf(
+            R.id.btn_cat_1, R.id.btn_cat_2, R.id.btn_cat_3, R.id.btn_cat_4, R.id.btn_cat_5,
+            R.id.btn_cat_6, R.id.btn_cat_7, R.id.btn_cat_8, R.id.btn_cat_9
+        )
+
+        for (i in catButtonIds.indices) {
+            val btnId = catButtonIds[i]
+            if (i < displayCategories.size) {
+                val cat = displayCategories[i]
                 views.setViewVisibility(btnId, View.VISIBLE)
                 views.setTextViewText(btnId, cat.name)
+                views.setInt(btnId, "setBackgroundResource", catBtnBg)
+                views.setTextColor(btnId, catBtnTextColor)
                 views.setOnClickFillInIntent(btnId, createRegisterIntent(cat))
             } else {
                 views.setViewVisibility(btnId, View.GONE)
             }
         }
 
-        // Always show "سایر..." button
+        // Row 1 visibility: show if any categories present for Row 1
+        views.setViewVisibility(
+            R.id.widget_category_row_1,
+            if (displayCategories.isNotEmpty()) View.VISIBLE else View.GONE
+        )
+
+        // Always show "سایر..." button in Row 2
         views.setViewVisibility(R.id.btn_fav_more, View.VISIBLE)
         views.setTextViewText(R.id.btn_fav_more, "سایر...")
+        views.setInt(R.id.btn_fav_more, "setBackgroundResource", moreBtnBg)
+        views.setTextColor(R.id.btn_fav_more, moreBtnTextColor)
 
         val moreIntent = Intent().apply {
             putExtra("widget_action", "PICK_CATEGORY")

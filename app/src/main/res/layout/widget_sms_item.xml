@@ -79,20 +79,20 @@
             android:textSize="10.5sp" />
     </LinearLayout>
 
-    <!-- Bottom Action Row: Up to 4 Starred Category Buttons + Always "سایر..." -->
+    <!-- Bottom Action Section: 2 Rows of Buttons (9 Categories + 1 "Other") -->
+    <!-- Row 1: Categories 1 to 5 -->
     <LinearLayout
-        android:id="@+id/widget_category_button_row"
+        android:id="@+id/widget_category_row_1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="5dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <!-- Starred Category 1 -->
         <TextView
-            android:id="@+id/btn_fav_1"
+            android:id="@+id/btn_cat_1"
             android:layout_width="0dp"
-            android:layout_height="28dp"
+            android:layout_height="26dp"
             android:layout_marginStart="1.5dp"
             android:layout_marginEnd="1.5dp"
             android:layout_weight="1"
@@ -100,18 +100,17 @@
             android:ellipsize="end"
             android:gravity="center"
             android:maxLines="1"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:text="خوراک"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="دسته ۱"
             android:textColor="@color/widget_cat_btn_text"
-            android:textSize="10.5sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
-        <!-- Starred Category 2 -->
         <TextView
-            android:id="@+id/btn_fav_2"
+            android:id="@+id/btn_cat_2"
             android:layout_width="0dp"
-            android:layout_height="28dp"
+            android:layout_height="26dp"
             android:layout_marginStart="1.5dp"
             android:layout_marginEnd="1.5dp"
             android:layout_weight="1"
@@ -119,18 +118,17 @@
             android:ellipsize="end"
             android:gravity="center"
             android:maxLines="1"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:text="حمل‌ونقل"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="دسته ۲"
             android:textColor="@color/widget_cat_btn_text"
-            android:textSize="10.5sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
-        <!-- Starred Category 3 -->
         <TextView
-            android:id="@+id/btn_fav_3"
+            android:id="@+id/btn_cat_3"
             android:layout_width="0dp"
-            android:layout_height="28dp"
+            android:layout_height="26dp"
             android:layout_marginStart="1.5dp"
             android:layout_marginEnd="1.5dp"
             android:layout_weight="1"
@@ -138,18 +136,17 @@
             android:ellipsize="end"
             android:gravity="center"
             android:maxLines="1"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:text="خرید"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="دسته ۳"
             android:textColor="@color/widget_cat_btn_text"
-            android:textSize="10.5sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
-        <!-- Starred Category 4 -->
         <TextView
-            android:id="@+id/btn_fav_4"
+            android:id="@+id/btn_cat_4"
             android:layout_width="0dp"
-            android:layout_height="28dp"
+            android:layout_height="26dp"
             android:layout_marginStart="1.5dp"
             android:layout_marginEnd="1.5dp"
             android:layout_weight="1"
@@ -157,29 +154,129 @@
             android:ellipsize="end"
             android:gravity="center"
             android:maxLines="1"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
-            android:text="قبوض"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="دسته ۴"
             android:textColor="@color/widget_cat_btn_text"
-            android:textSize="10.5sp"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btn_cat_5"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="1.5dp"
+            android:layout_marginEnd="1.5dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_cat_btn_bg"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="دسته ۵"
+            android:textColor="@color/widget_cat_btn_text"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Row 2: Categories 6 to 9 + "سایر..." -->
+    <LinearLayout
+        android:id="@+id/widget_category_row_2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3.5dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/btn_cat_6"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="1.5dp"
+            android:layout_marginEnd="1.5dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_cat_btn_bg"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="دسته ۶"
+            android:textColor="@color/widget_cat_btn_text"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btn_cat_7"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="1.5dp"
+            android:layout_marginEnd="1.5dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_cat_btn_bg"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="دسته ۷"
+            android:textColor="@color/widget_cat_btn_text"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btn_cat_8"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="1.5dp"
+            android:layout_marginEnd="1.5dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_cat_btn_bg"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="دسته ۸"
+            android:textColor="@color/widget_cat_btn_text"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btn_cat_9"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="1.5dp"
+            android:layout_marginEnd="1.5dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_cat_btn_bg"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="دسته ۹"
+            android:textColor="@color/widget_cat_btn_text"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
         <!-- Always Present: "سایر..." Button -->
         <TextView
             android:id="@+id/btn_fav_more"
             android:layout_width="0dp"
-            android:layout_height="28dp"
+            android:layout_height="26dp"
             android:layout_marginStart="1.5dp"
             android:layout_marginEnd="1.5dp"
-            android:layout_weight="0.9"
+            android:layout_weight="1"
             android:background="@drawable/widget_cat_more_btn_bg"
             android:gravity="center"
             android:maxLines="1"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
             android:text="سایر..."
             android:textColor="@color/widget_cat_more_btn_text"
-            android:textSize="10.5sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
     </LinearLayout>
 

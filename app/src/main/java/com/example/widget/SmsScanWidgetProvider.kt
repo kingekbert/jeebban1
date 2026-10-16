@@ -14,10 +14,14 @@ class SmsScanWidgetProvider : AppWidgetProvider() {
         const val ACTION_TRIGGER_SCAN = "com.example.widget.ACTION_TRIGGER_SCAN"
         const val ACTION_ITEM_CLICK = "com.example.widget.ACTION_ITEM_CLICK"
         const val ACTION_REGISTER_ITEM = "com.example.widget.ACTION_REGISTER_ITEM"
+        const val ACTION_TOGGLE_THEME = "com.example.widget.ACTION_TOGGLE_THEME"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
+            ACTION_TOGGLE_THEME -> {
+                WidgetStatusHelper.toggleWidgetTheme(context)
+            }
             ACTION_TRIGGER_SCAN -> {
                 val pendingResult = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
