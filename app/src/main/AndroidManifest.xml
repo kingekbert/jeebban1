@@ -49,11 +49,18 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.widget.ACTION_TRIGGER_SCAN" />
+                <action android:name="com.example.widget.ACTION_REGISTER_ITEM" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/sms_scan_widget_info" />
         </receiver>
+
+        <service
+            android:name=".widget.WidgetScanService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
     </application>
 
 </manifest>

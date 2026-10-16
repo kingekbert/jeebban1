@@ -9,4 +9,8 @@
     <color name="widget_btn_start">#FF2E7D32</color>
     <color name="widget_btn_end">#FF388E3C</color>
     <color name="widget_btn_text">#FFFFFFFF</color>
+    <color name="widget_item_bg">#FF242E26</color>
+    <color name="widget_item_border">#FF344436</color>
+    <color name="widget_income_color">#FF81C784</color>
+    <color name="widget_expense_color">#FFE57373</color>
 </resources>

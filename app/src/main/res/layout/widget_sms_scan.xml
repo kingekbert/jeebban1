@@ -5,10 +5,11 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_background"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:padding="10dp">
 
     <!-- Header: App Name & Subtitle -->
     <LinearLayout
+        android:id="@+id/widget_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
@@ -27,7 +28,7 @@
             android:layout_marginStart="6dp"
             android:text="@string/app_name"
             android:textColor="@color/widget_title_color"
-            android:textSize="14sp"
+            android:textSize="13.5sp"
             android:textStyle="bold" />
 
         <TextView
@@ -35,17 +36,19 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:text="اسکن هوشمند ۷ روز اخیر"
             android:textColor="@color/widget_subtitle_color"
-            android:textSize="11sp" />
+            android:textSize="10.5sp" />
     </LinearLayout>
 
-    <!-- Main Prominent Scan Button -->
+    <!-- Scan Trigger Button (Works 100% in background on home screen) -->
     <LinearLayout
         android:id="@+id/widget_btn_scan"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
-        android:layout_marginTop="8dp"
+        android:layout_height="38dp"
+        android:layout_marginTop="6dp"
         android:background="@drawable/widget_btn_scan_bg"
         android:clickable="true"
         android:focusable="true"
@@ -55,8 +58,8 @@
         android:paddingEnd="12dp">
 
         <ImageView
-            android:layout_width="20dp"
-            android:layout_height="20dp"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
             android:src="@drawable/ic_widget_sms"
             android:contentDescription="اسکن پیامک‌ها" />
 
@@ -66,7 +69,7 @@
             android:layout_marginStart="8dp"
             android:text="اسکن پیامک‌ها"
             android:textColor="@color/widget_btn_text"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -75,12 +78,54 @@
         android:id="@+id/widget_tv_status"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="4dp"
         android:ellipsize="end"
         android:gravity="center"
         android:maxLines="1"
         android:text="هنوز اسکن نشده"
         android:textColor="@color/widget_status_color"
-        android:textSize="11.5sp" />
+        android:textSize="10.5sp" />
+
+    <!-- Interactive List of Unregistered SMS on Home Screen -->
+    <ListView
+        android:id="@+id/widget_list_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="@null"
+        android:dividerHeight="0dp"
+        android:scrollbars="vertical" />
+
+    <!-- Empty State View on Home Screen -->
+    <LinearLayout
+        android:id="@+id/widget_empty_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <TextView
+            android:id="@+id/widget_tv_empty_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="همه پیامک‌های ۷ روز گذشته ثبت شده‌اند ✅"
+            android:textColor="@color/widget_income_color"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_tv_empty_sub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:text="برای اسکن مجدد، دکمه بالا را لمس کنید."
+            android:textColor="@color/widget_status_color"
+            android:textSize="10.5sp" />
+    </LinearLayout>
 
 </LinearLayout>

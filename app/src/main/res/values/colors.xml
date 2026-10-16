@@ -17,4 +17,8 @@
     <color name="widget_btn_start">#FF1B5E20</color>
     <color name="widget_btn_end">#FF2E7D32</color>
     <color name="widget_btn_text">#FFFFFFFF</color>
+    <color name="widget_item_bg">#FFF6F8F6</color>
+    <color name="widget_item_border">#FFE0E8E2</color>
+    <color name="widget_income_color">#FF2E7D32</color>
+    <color name="widget_expense_color">#FFC62828</color>
 </resources>
