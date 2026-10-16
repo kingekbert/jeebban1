@@ -18,10 +18,6 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
-  base {
-    archivesName.set("Jeebban")
-  }
-
   val debugKeystoreFile = file("${rootDir}/debug.keystore")
 
   signingConfigs {
