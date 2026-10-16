@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
@@ -848,22 +849,46 @@ fun PreConfirmScreen(
                 }
             }
 
-            // 7. Save Action Button
+            // 7. Save Action Buttons: ثبت سریع و ثبت عادی
             item {
-                Button(
-                    onClick = { viewModel.saveTransaction() },
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(12.dp)
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Check, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "ثبت نهایی تراکنش",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Button(
+                        onClick = { viewModel.quickSaveTransaction() },
+                        modifier = Modifier
+                            .weight(1.1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(imageVector = Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "ثبت سریع",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = { viewModel.saveTransaction() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "ثبت عادی",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Widget Semantic Colors (Dark Theme) -->
+    <color name="widget_card_bg">#FF1A231C</color>
+    <color name="widget_card_border">#FF2A3A2E</color>
+    <color name="widget_title_color">#FF81C784</color>
+    <color name="widget_subtitle_color">#FFA3B8A8</color>
+    <color name="widget_status_color">#FFB8CCBE</color>
+    <color name="widget_btn_start">#FF2E7D32</color>
+    <color name="widget_btn_end">#FF388E3C</color>
+    <color name="widget_btn_text">#FFFFFFFF</color>
+</resources>

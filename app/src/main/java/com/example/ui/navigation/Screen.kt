@@ -36,6 +36,7 @@ sealed class Screen(val route: String) {
         }
     }
     object ScanSms : Screen("scan_sms")
+    object WidgetScan : Screen("widget_scan")
     object PreConfirm : Screen("pre_confirm")
     object CategoryDetail : Screen("category_detail/{categoryId}?startDate={startDate}&endDate={endDate}&accountId={accountId}&type={type}") {
         fun createRoute(

@@ -105,6 +105,7 @@ fun NavGraph(
     app: FinTrackApp,
     initialSharedSmsText: String? = null,
     navigateToScanSms: Boolean = false,
+    navigateToWidgetScan: Boolean = false,
     navController: NavHostController = rememberNavController(),
     onThemeChanged: (String) -> Unit = {}
 ) {
@@ -148,6 +149,14 @@ fun NavGraph(
     LaunchedEffect(navigateToScanSms) {
         if (navigateToScanSms) {
             navController.navigate(Screen.ScanSms.route)
+        }
+    }
+
+    LaunchedEffect(navigateToWidgetScan) {
+        if (navigateToWidgetScan) {
+            navController.navigate(Screen.WidgetScan.route) {
+                launchSingleTop = true
+            }
         }
     }
 
@@ -393,6 +402,27 @@ fun NavGraph(
                     },
                     onNavigateToPatternLearnerWithText = { text ->
                         navController.navigate(Screen.PatternLearner.createRoute(null, text))
+                    }
+                )
+            }
+
+            composable(Screen.WidgetScan.route) {
+                val viewModel: ScanSmsViewModel = viewModel(
+                    factory = ScanSmsViewModel.Factory(
+                        transactionRepository = app.appModule.transactionRepository,
+                        accountRepository = app.appModule.accountRepository,
+                        smsPatternRepository = app.appModule.smsPatternRepository
+                    )
+                )
+                com.example.ui.screens.scan_sms.WidgetScanScreen(
+                    viewModel = viewModel,
+                    sharedScanViewModel = sharedScanViewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToPreConfirm = {
+                        navController.navigate(Screen.PreConfirm.route)
+                    },
+                    onNavigateToFullScan = {
+                        navController.navigate(Screen.ScanSms.route)
                     }
                 )
             }
