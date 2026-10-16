@@ -50,11 +50,11 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- Bottom Row: Date / Note snippet & Quick Register Button -->
+    <!-- Middle Row: Date & Note snippet -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="3dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
@@ -77,19 +77,45 @@
             android:text="خرید از فروشگاه"
             android:textColor="@color/widget_subtitle_color"
             android:textSize="10.5sp" />
+    </LinearLayout>
 
-        <!-- Quick Register Action Button (1-tap on home screen) -->
+    <!-- Bottom Action Row: Category Selector & Quick Register Button -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <!-- Category Picker Button (1-tap opens quick category dialog) -->
+        <TextView
+            android:id="@+id/btn_item_category"
+            android:layout_width="0dp"
+            android:layout_height="28dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_item_btn_secondary_bg"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="دسته: نامشخص 🏷️"
+            android:textColor="@color/widget_category_badge_text"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <!-- Quick Register Action Button (1-tap with current suggested category) -->
         <TextView
             android:id="@+id/btn_item_register"
             android:layout_width="wrap_content"
             android:layout_height="28dp"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="8dp"
             android:background="@drawable/widget_item_btn_bg"
             android:gravity="center"
             android:paddingStart="12dp"
             android:paddingEnd="12dp"
-            android:text="ثبت ⚡"
-            android:textColor="#FFFFFF"
+            android:text="ثبت سریع ⚡"
+            android:textColor="@color/widget_btn_text"
             android:textSize="11sp"
             android:textStyle="bold" />
     </LinearLayout>

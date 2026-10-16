@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Widget Semantic Colors (Dark Theme) -->
-    <color name="widget_card_bg">#FF1A231C</color>
-    <color name="widget_card_border">#FF2A3A2E</color>
+    <!-- Widget Semantic Colors Aligned with App Theme (Dark) -->
+    <color name="widget_card_bg">#FF1A201B</color>
+    <color name="widget_outer_bg">#FF101311</color>
+    <color name="widget_card_border">#FF3F4840</color>
     <color name="widget_title_color">#FF81C784</color>
-    <color name="widget_subtitle_color">#FFA3B8A8</color>
-    <color name="widget_status_color">#FFB8CCBE</color>
+    <color name="widget_subtitle_color">#FFC3CBC4</color>
+    <color name="widget_status_color">#FFA3B8A8</color>
     <color name="widget_btn_start">#FF2E7D32</color>
-    <color name="widget_btn_end">#FF388E3C</color>
+    <color name="widget_btn_end">#FF1B5E20</color>
     <color name="widget_btn_text">#FFFFFFFF</color>
-    <color name="widget_item_bg">#FF242E26</color>
-    <color name="widget_item_border">#FF344436</color>
-    <color name="widget_income_color">#FF81C784</color>
-    <color name="widget_expense_color">#FFE57373</color>
+    <color name="widget_item_bg">#FF262E27</color>
+    <color name="widget_item_border">#FF2C342E</color>
+    <color name="widget_income_color">#FF66BB6A</color>
+    <color name="widget_expense_color">#FFEF5350</color>
+    <color name="widget_category_badge_bg">#FF2E3A30</color>
+    <color name="widget_category_badge_text">#FF81C784</color>
 </resources>

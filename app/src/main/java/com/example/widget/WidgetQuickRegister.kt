@@ -63,9 +63,12 @@ object WidgetQuickRegister {
                 }
             }
 
+            val explicitCatId = intent.getLongExtra("extra_category_id", -1L)
+            val explicitCategory = if (explicitCatId > 0) filteredCats.find { it.id == explicitCatId } else null
+
             val fullText = "$note $bankName $accountIdent"
             val guessedCategory = CategoryGuesser.guessCategory(fullText, filteredCats)
-            val selectedCategory = guessedCategory ?: filteredCats.firstOrNull()
+            val selectedCategory = explicitCategory ?: guessedCategory ?: filteredCats.firstOrNull()
             val categoryId = selectedCategory?.id
 
             // 3. Create and Save Transaction

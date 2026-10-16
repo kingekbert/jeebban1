@@ -44,12 +44,18 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".widget.WidgetCategoryPickerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TranslucentDialog" />
+
         <receiver
             android:name=".widget.SmsScanWidgetProvider"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.example.widget.ACTION_TRIGGER_SCAN" />
+                <action android:name="com.example.widget.ACTION_ITEM_CLICK" />
                 <action android:name="com.example.widget.ACTION_REGISTER_ITEM" />
             </intent-filter>
             <meta-data

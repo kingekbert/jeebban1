@@ -12,6 +12,7 @@ class SmsScanWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val ACTION_TRIGGER_SCAN = "com.example.widget.ACTION_TRIGGER_SCAN"
+        const val ACTION_ITEM_CLICK = "com.example.widget.ACTION_ITEM_CLICK"
         const val ACTION_REGISTER_ITEM = "com.example.widget.ACTION_REGISTER_ITEM"
     }
 
@@ -27,13 +28,23 @@ class SmsScanWidgetProvider : AppWidgetProvider() {
                     }
                 }
             }
-            ACTION_REGISTER_ITEM -> {
-                val pendingResult = goAsync()
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        WidgetQuickRegister.registerFromIntent(context, intent)
-                    } finally {
-                        pendingResult.finish()
+            ACTION_ITEM_CLICK, ACTION_REGISTER_ITEM -> {
+                val actionType = intent.getStringExtra("widget_action")
+                if (actionType == "PICK_CATEGORY") {
+                    val pickerIntent = Intent(context, WidgetCategoryPickerActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        putExtras(intent)
+                    }
+                    context.startActivity(pickerIntent)
+                } else {
+                    // Default to background quick register
+                    val pendingResult = goAsync()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            WidgetQuickRegister.registerFromIntent(context, intent)
+                        } finally {
+                            pendingResult.finish()
+                        }
                     }
                 }
             }

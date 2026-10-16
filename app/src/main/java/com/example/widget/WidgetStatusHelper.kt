@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.RemoteViews
+import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
 import com.example.ui.screens.scan_sms.ScannedSmsItem
@@ -105,6 +106,10 @@ object WidgetStatusHelper {
                 for (id in appWidgetIds) {
                     val views = RemoteViews(context.packageName, R.layout.widget_sms_scan)
                     views.setTextViewText(R.id.widget_tv_status, status)
+                    // While scanning, empty view shows scanning indicator instead of false success
+                    views.setTextViewText(R.id.widget_tv_empty_title, "در حال جستجو و پردازش پیامک‌های ۷ روز گذشته...")
+                    views.setTextColor(R.id.widget_tv_empty_title, ContextCompat.getColor(context, R.color.widget_title_color))
+                    views.setTextViewText(R.id.widget_tv_empty_sub, "لطفاً چند لحظه صبر کنید...")
                     appWidgetManager.partiallyUpdateAppWidget(id, views)
                 }
             }
@@ -146,7 +151,7 @@ object WidgetStatusHelper {
             )
             views.setOnClickPendingIntent(R.id.widget_header, appPendingIntent)
 
-            // 2. Scan Button: 100% Background Scan via Broadcast (NO APP LAUNCH)
+            // 2. Scan Button: 100% Background Scan via Broadcast
             val scanIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
                 action = SmsScanWidgetProvider.ACTION_TRIGGER_SCAN
             }
@@ -162,7 +167,18 @@ object WidgetStatusHelper {
             views.setTextViewText(R.id.widget_tv_status, statusText)
             views.setTextViewText(R.id.widget_tv_title, context.getString(R.string.app_name))
 
-            // 4. Remote Collection Adapter for ListView
+            // 4. Empty View text: precise and contextual (never shows false success during initial or scanning)
+            if (lastTime <= 0L) {
+                views.setTextViewText(R.id.widget_tv_empty_title, "پیامک‌های بانکی ۷ روز اخیر")
+                views.setTextColor(R.id.widget_tv_empty_title, ContextCompat.getColor(context, R.color.widget_title_color))
+                views.setTextViewText(R.id.widget_tv_empty_sub, "برای یافتن پیامک‌های ثبت‌نشده، دکمه «اسکن پیامک‌ها» را لمس کنید.")
+            } else if (newCount == 0) {
+                views.setTextViewText(R.id.widget_tv_empty_title, "همه پیامک‌های ۷ روز گذشته ثبت شده‌اند ✅")
+                views.setTextColor(R.id.widget_tv_empty_title, ContextCompat.getColor(context, R.color.widget_income_color))
+                views.setTextViewText(R.id.widget_tv_empty_sub, "هیچ تراکنش ثبت‌نشده‌ای در ۷ روز اخیر یافت نشد.")
+            }
+
+            // 5. Remote Collection Adapter for ListView
             val serviceIntent = Intent(context, WidgetScanService::class.java).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
                 data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
@@ -170,14 +186,14 @@ object WidgetStatusHelper {
             views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
             views.setEmptyView(R.id.widget_list_view, R.id.widget_empty_view)
 
-            // 5. PendingIntent template for items in ListView (100% Background Quick Register)
-            val itemRegisterIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
-                action = SmsScanWidgetProvider.ACTION_REGISTER_ITEM
+            // 6. PendingIntent template for items in ListView (handles both category pick & quick register)
+            val itemClickIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                action = SmsScanWidgetProvider.ACTION_ITEM_CLICK
             }
             val itemPendingIntent = PendingIntent.getBroadcast(
                 context,
                 300,
-                itemRegisterIntent,
+                itemClickIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
             )
             views.setPendingIntentTemplate(R.id.widget_list_view, itemPendingIntent)

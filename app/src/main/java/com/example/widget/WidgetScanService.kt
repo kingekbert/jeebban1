@@ -5,12 +5,17 @@ import android.content.Intent
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
 import androidx.core.content.ContextCompat
+import com.example.FinTrackApp
 import com.example.R
+import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.TransactionType
 import com.example.ui.screens.scan_sms.ScannedSmsItem
 import com.example.util.AmountFormatter
+import com.example.util.CategoryGuesser
 import com.example.util.DateFormatter
 import com.example.util.toPersianDigits
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.runBlocking
 
 class WidgetScanService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
@@ -21,6 +26,7 @@ class WidgetScanService : RemoteViewsService() {
 class WidgetScanViewsFactory(private val context: Context) : RemoteViewsService.RemoteViewsFactory {
 
     private var items: List<ScannedSmsItem> = emptyList()
+    private var categories: List<CategoryEntity> = emptyList()
 
     override fun onCreate() {
         // Init
@@ -28,10 +34,20 @@ class WidgetScanViewsFactory(private val context: Context) : RemoteViewsService.
 
     override fun onDataSetChanged() {
         items = WidgetDataStore.getItems(context)
+        try {
+            val app = context.applicationContext as? FinTrackApp
+            val appModule = app?.appModule ?: com.example.di.AppModule(context.applicationContext)
+            runBlocking {
+                categories = appModule.categoryRepository.allCategories.firstOrNull() ?: emptyList()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     override fun onDestroy() {
         items = emptyList()
+        categories = emptyList()
     }
 
     override fun getCount(): Int = items.size
@@ -55,6 +71,18 @@ class WidgetScanViewsFactory(private val context: Context) : RemoteViewsService.
         val dateText = DateFormatter.formatShort(item.date)
         val noteText = parsed.rawDescription?.ifBlank { item.rawText } ?: item.rawText
 
+        val fullTextForCategory = "$noteText $bankPart $accountPart"
+        val matchingCategories = categories.filter {
+            if (isIncome) it.type == com.example.data.local.entity.CategoryType.INCOME || it.type == com.example.data.local.entity.CategoryType.BOTH
+            else it.type == com.example.data.local.entity.CategoryType.EXPENSE || it.type == com.example.data.local.entity.CategoryType.BOTH
+        }
+        val guessedCategory = CategoryGuesser.guessCategory(fullTextForCategory, matchingCategories)
+        val categoryBtnLabel = if (guessedCategory != null) {
+            "دسته: ${guessedCategory.name} 🏷️"
+        } else {
+            "انتخاب دسته 🏷️"
+        }
+
         val views = RemoteViews(context.packageName, R.layout.widget_sms_item)
 
         views.setTextViewText(R.id.tv_item_bank, bankFullText)
@@ -66,9 +94,11 @@ class WidgetScanViewsFactory(private val context: Context) : RemoteViewsService.
 
         views.setTextViewText(R.id.tv_item_date, dateText)
         views.setTextViewText(R.id.tv_item_note, noteText)
+        views.setTextViewText(R.id.btn_item_category, categoryBtnLabel)
 
-        // FillInIntent triggered on tap of "ثبت ⚡" or row
-        val fillInIntent = Intent().apply {
+        // 1. Category Picker FillInIntent (triggers floating Category Picker dialog directly)
+        val pickCategoryIntent = Intent().apply {
+            putExtra("widget_action", "PICK_CATEGORY")
             putExtra("extra_sms_hash", item.smsHash)
             putExtra("extra_amount", parsed.amount ?: 0L)
             putExtra("extra_type", (parsed.transactionType ?: TransactionType.EXPENSE).name)
@@ -77,9 +107,24 @@ class WidgetScanViewsFactory(private val context: Context) : RemoteViewsService.
             putExtra("extra_account_ident", parsed.accountIdentifier ?: "")
             putExtra("extra_note", noteText)
         }
+        views.setOnClickFillInIntent(R.id.btn_item_category, pickCategoryIntent)
+        views.setOnClickFillInIntent(R.id.widget_item_container, pickCategoryIntent)
 
-        views.setOnClickFillInIntent(R.id.btn_item_register, fillInIntent)
-        views.setOnClickFillInIntent(R.id.widget_item_container, fillInIntent)
+        // 2. Quick Register FillInIntent (saves with suggested category without opening any dialog)
+        val quickRegisterIntent = Intent().apply {
+            putExtra("widget_action", "QUICK_REGISTER")
+            putExtra("extra_sms_hash", item.smsHash)
+            putExtra("extra_amount", parsed.amount ?: 0L)
+            putExtra("extra_type", (parsed.transactionType ?: TransactionType.EXPENSE).name)
+            putExtra("extra_date", parsed.date ?: item.date)
+            putExtra("extra_bank_name", parsed.bankName ?: "")
+            putExtra("extra_account_ident", parsed.accountIdentifier ?: "")
+            putExtra("extra_note", noteText)
+            if (guessedCategory != null) {
+                putExtra("extra_category_id", guessedCategory.id)
+            }
+        }
+        views.setOnClickFillInIntent(R.id.btn_item_register, quickRegisterIntent)
 
         return views
     }
