@@ -58,6 +58,7 @@
                 <action android:name="com.example.widget.ACTION_ITEM_CLICK" />
                 <action android:name="com.example.widget.ACTION_REGISTER_ITEM" />
                 <action android:name="com.example.widget.ACTION_TOGGLE_THEME" />
+                <action android:name="com.example.widget.ACTION_SWITCH_CATEGORY_PAGE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

@@ -27,6 +27,28 @@ object WidgetStatusHelper {
     private const val KEY_LAST_SCAN_TIME = "last_scan_time"
     private const val KEY_LAST_NEW_COUNT = "last_new_count"
     private const val KEY_WIDGET_THEME_OVERRIDE = "widget_theme_override"
+    private const val KEY_CATEGORY_PAGE = "widget_category_page"
+
+    fun getCategoryPage(context: Context): Int {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.getInt(KEY_CATEGORY_PAGE, 0)
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    fun toggleCategoryPage(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val current = prefs.getInt(KEY_CATEGORY_PAGE, 0)
+            val next = if (current == 0) 1 else 0
+            prefs.edit().putInt(KEY_CATEGORY_PAGE, next).apply()
+            updateAllWidgets(context)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     fun saveScanResult(context: Context, newSmsCount: Int, timestamp: Long = System.currentTimeMillis()) {
         try {
@@ -230,10 +252,9 @@ object WidgetStatusHelper {
         val themeIconRes = if (isDark) R.drawable.ic_widget_sun else R.drawable.ic_widget_moon
         val containerBgRes = if (isDark) R.drawable.widget_bg_dark else R.drawable.widget_bg_light
 
+        val catPage = getCategoryPage(context)
         val catButtonIds = listOf(
-            R.id.btn_cat_1, R.id.btn_cat_2, R.id.btn_cat_3, R.id.btn_cat_4, R.id.btn_cat_5,
-            R.id.btn_cat_6, R.id.btn_cat_7, R.id.btn_cat_8, R.id.btn_cat_9, R.id.btn_cat_10,
-            R.id.btn_cat_11, R.id.btn_cat_12
+            R.id.btn_cat_1, R.id.btn_cat_2, R.id.btn_cat_3, R.id.btn_cat_4
         )
 
         val catBtnBg = if (isDark) R.drawable.widget_cat_btn_bg_dark else R.drawable.widget_cat_btn_bg_light
@@ -336,19 +357,29 @@ object WidgetStatusHelper {
                 views.setTextViewText(R.id.tv_widget_tx_note, noteText)
                 views.setTextColor(R.id.tv_widget_tx_note, subtitleColor)
 
-                // Category Buttons (Horizontal Row)
+                // Category Buttons (Horizontal Row with comfortable sizing & optional pagination)
                 val matchingCats = allCategories.filter {
                     if (isIncome) it.type == CategoryType.INCOME || it.type == CategoryType.BOTH
                     else it.type == CategoryType.EXPENSE || it.type == CategoryType.BOTH
                 }
                 val starred = matchingCats.filter { it.isFavorite }
                 val nonStarred = matchingCats.filter { !it.isFavorite }
-                val displayCats = (starred + nonStarred).take(12)
+                val allDisplayCats = starred + nonStarred
+
+                val pageSize = 4
+                val totalCats = allDisplayCats.size
+                val hasMultiplePages = totalCats > pageSize
+                val effectivePage = if (hasMultiplePages && catPage == 1) 1 else 0
+                val pageCats = if (effectivePage == 1) {
+                    allDisplayCats.drop(pageSize).take(pageSize).ifEmpty { allDisplayCats.take(pageSize) }
+                } else {
+                    allDisplayCats.take(pageSize)
+                }
 
                 for (i in catButtonIds.indices) {
                     val btnId = catButtonIds[i]
-                    if (i < displayCats.size) {
-                        val cat = displayCats[i]
+                    if (i < pageCats.size) {
+                        val cat = pageCats[i]
                         views.setViewVisibility(btnId, View.VISIBLE)
                         views.setTextViewText(btnId, cat.name)
                         views.setInt(btnId, "setBackgroundResource", catBtnBg)
@@ -377,6 +408,27 @@ object WidgetStatusHelper {
                     } else {
                         views.setViewVisibility(btnId, View.GONE)
                     }
+                }
+
+                // Pagination button (◀ / ▶) if more than 4 categories
+                if (hasMultiplePages) {
+                    views.setViewVisibility(R.id.btn_cat_page, View.VISIBLE)
+                    views.setInt(R.id.btn_cat_page, "setBackgroundResource", moreBtnBg)
+                    views.setTextColor(R.id.btn_cat_page, moreBtnTextColor)
+                    views.setTextViewText(R.id.btn_cat_page, if (effectivePage == 0) "◀" else "▶")
+
+                    val switchPageIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                        action = SmsScanWidgetProvider.ACTION_SWITCH_CATEGORY_PAGE
+                    }
+                    val switchPagePi = PendingIntent.getBroadcast(
+                        context,
+                        (appWidgetId * 100) + 98,
+                        switchPageIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    views.setOnClickPendingIntent(R.id.btn_cat_page, switchPagePi)
+                } else {
+                    views.setViewVisibility(R.id.btn_cat_page, View.GONE)
                 }
 
                 // "سایر..." button

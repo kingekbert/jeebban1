@@ -15,10 +15,14 @@ class SmsScanWidgetProvider : AppWidgetProvider() {
         const val ACTION_ITEM_CLICK = "com.example.widget.ACTION_ITEM_CLICK"
         const val ACTION_REGISTER_ITEM = "com.example.widget.ACTION_REGISTER_ITEM"
         const val ACTION_TOGGLE_THEME = "com.example.widget.ACTION_TOGGLE_THEME"
+        const val ACTION_SWITCH_CATEGORY_PAGE = "com.example.widget.ACTION_SWITCH_CATEGORY_PAGE"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
+            ACTION_SWITCH_CATEGORY_PAGE -> {
+                WidgetStatusHelper.toggleCategoryPage(context)
+            }
             ACTION_TOGGLE_THEME -> {
                 WidgetStatusHelper.toggleWidgetTheme(context)
             }

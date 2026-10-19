@@ -193,245 +193,119 @@
                 android:textColor="@color/widget_subtitle_color"
                 android:textSize="10.5sp" />
 
-            <!-- Bottom Row: Horizontal Scrollable Category Buttons -->
-            <HorizontalScrollView
-                android:id="@+id/widget_cat_scroll"
+            <!-- Bottom Row: Category Quick Buttons in a Single Comfortable Row -->
+            <LinearLayout
+                android:id="@+id/widget_cat_buttons_container"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="5dp"
-                android:fillViewport="true"
-                android:scrollbars="none">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-                <LinearLayout
-                    android:id="@+id/widget_cat_buttons_container"
+                <TextView
+                    android:id="@+id/btn_cat_1"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/widget_cat_btn_bg"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="خوراک"
+                    android:textColor="@color/widget_cat_btn_text"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_cat_2"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/widget_cat_btn_bg"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="حمل‌ونقل"
+                    android:textColor="@color/widget_cat_btn_text"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_cat_3"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/widget_cat_btn_bg"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="خرید"
+                    android:textColor="@color/widget_cat_btn_text"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btn_cat_4"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/widget_cat_btn_bg"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="قبوض"
+                    android:textColor="@color/widget_cat_btn_text"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+
+                <!-- Pagination Switcher Button (e.g. ◀ or ▶ to flip to next 4 categories) -->
+                <TextView
+                    android:id="@+id/btn_cat_page"
+                    android:layout_width="32dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
+                    android:background="@drawable/widget_cat_more_btn_bg"
+                    android:gravity="center"
+                    android:text="◀"
+                    android:textColor="@color/widget_cat_more_btn_text"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <!-- Always Present: "سایر..." Button -->
+                <TextView
+                    android:id="@+id/btn_cat_more"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/btn_cat_1"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="خوراک"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_2"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="حمل‌ونقل"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_3"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="خرید"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_4"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="قبوض"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_5"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="سلامت"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_6"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="تفریح"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_7"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="پوشاک"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_8"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="آموزش"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_9"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="عمومی"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_10"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="دسته ۱۰"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_11"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="دسته ۱۱"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btn_cat_12"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:minWidth="60dp"
-                        android:background="@drawable/widget_cat_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="دسته ۱۲"
-                        android:textColor="@color/widget_cat_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <!-- Always Present: "سایر..." Button -->
-                    <TextView
-                        android:id="@+id/btn_cat_more"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="3dp"
-                        android:layout_marginEnd="3dp"
-                        android:minWidth="65dp"
-                        android:background="@drawable/widget_cat_more_btn_bg"
-                        android:gravity="center"
-                        android:maxLines="1"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:text="سایر..."
-                        android:textColor="@color/widget_cat_more_btn_text"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-            </HorizontalScrollView>
+                    android:layout_height="36dp"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
+                    android:minWidth="52dp"
+                    android:background="@drawable/widget_cat_more_btn_bg"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="سایر..."
+                    android:textColor="@color/widget_cat_more_btn_text"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
         </LinearLayout>
     </ViewFlipper>
 

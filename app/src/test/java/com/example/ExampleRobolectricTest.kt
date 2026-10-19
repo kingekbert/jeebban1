@@ -18,4 +18,12 @@ class ExampleRobolectricTest {
     val appName = context.getString(R.string.app_name)
     assertEquals("جیب‌بان", appName)
   }
+
+  @Test
+  fun `inflate widget layout`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val views = android.widget.RemoteViews(context.packageName, R.layout.widget_sms_scan)
+    val inflated = views.apply(context, android.widget.FrameLayout(context))
+    org.junit.Assert.assertNotNull(inflated)
+  }
 }
