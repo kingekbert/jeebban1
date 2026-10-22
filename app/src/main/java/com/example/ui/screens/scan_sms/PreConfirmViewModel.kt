@@ -53,7 +53,11 @@ data class PreConfirmUiState(
     // Dong Settlement for Income
     val matchedDongs: List<MatchedDong> = emptyList(),
     val selectedMatchedDongId: Long? = null,
-    val settleDongEnabled: Boolean = true
+    val settleDongEnabled: Boolean = true,
+    // Transfer between accounts
+    val selectedToAccountId: Long? = null,
+    val transferFeeAmount: Long = 0L,
+    val detectedTransfer: com.example.util.DetectedTransfer? = null
 )
 
 class PreConfirmViewModel(
@@ -77,22 +81,47 @@ class PreConfirmViewModel(
         val finalSmsHash = targetItem.smsHash
         val finalNote = targetItem.parsedSms.rawDescription ?: ""
 
+        val detectedTransfer = ScanSmsDataHolder.detectedTransfer
+        val openAsTransfer = ScanSmsDataHolder.openAsTransfer
+
+        val finalType = if (openAsTransfer && detectedTransfer != null) {
+            TransactionType.TRANSFER
+        } else type
+
+        val transferAmount = if (openAsTransfer && detectedTransfer != null) {
+            detectedTransfer.transferAmount
+        } else finalAmount
+
+        val transferFee = if (openAsTransfer && detectedTransfer != null) {
+            detectedTransfer.feeAmount
+        } else 0L
+
+        val effectiveSmsHash = if (openAsTransfer && detectedTransfer != null) {
+            "${detectedTransfer.withdrawalItem.smsHash}|${detectedTransfer.depositItem.smsHash}"
+        } else finalSmsHash
+
+        val effectiveNote = if (openAsTransfer && detectedTransfer != null) {
+            "انتقال از ${detectedTransfer.sourceAccount?.name ?: "بانک مبدأ"} به ${detectedTransfer.destAccount?.name ?: "بانک مقصد"}"
+        } else finalNote
+
         _uiState.update {
             it.copy(
-                amount = finalAmount,
-                transactionType = type,
+                amount = transferAmount,
+                transactionType = finalType,
                 dateTimestamp = finalDate,
                 bankName = finalBankName?.ifBlank { null },
                 accountIdent = finalAccountIdent?.ifBlank { null },
-                smsHash = finalSmsHash,
-                note = finalNote,
+                smsHash = effectiveSmsHash,
+                note = effectiveNote,
                 isGroupExpenseEnabled = false,
-                groupShares = emptyList()
+                groupShares = emptyList(),
+                detectedTransfer = detectedTransfer,
+                transferFeeAmount = transferFee
             )
         }
 
-        if (type == TransactionType.INCOME && finalAmount > 0L) {
-            checkForMatchingDongs(finalAmount)
+        if (finalType == TransactionType.INCOME && transferAmount > 0L) {
+            checkForMatchingDongs(transferAmount)
         }
 
         viewModelScope.launch {
@@ -119,11 +148,21 @@ class PreConfirmViewModel(
                     }
                 }
 
-                val defaultAccId = matchedAccount?.id ?: allAccs.firstOrNull()?.id
+                val actualDefaultAccId = if (openAsTransfer && detectedTransfer?.sourceAccount != null) {
+                    detectedTransfer.sourceAccount.id
+                } else {
+                    matchedAccount?.id ?: allAccs.firstOrNull()?.id
+                }
+
+                val defaultToAccId = if (openAsTransfer && detectedTransfer?.destAccount != null) {
+                    detectedTransfer.destAccount.id
+                } else if (openAsTransfer && allAccs.size >= 2) {
+                    allAccs.find { it.id != actualDefaultAccId }?.id
+                } else null
 
                 val allCats = try { categoryRepository.allCategories.first() } catch (e: Exception) { emptyList() }
                 val filteredCats = allCats.filter {
-                    when (type) {
+                    when (finalType) {
                         TransactionType.EXPENSE -> it.type == CategoryType.EXPENSE || it.type == CategoryType.BOTH
                         TransactionType.INCOME -> it.type == CategoryType.INCOME || it.type == CategoryType.BOTH
                         else -> true
@@ -138,7 +177,8 @@ class PreConfirmViewModel(
                 _uiState.update {
                     it.copy(
                         accounts = allAccs,
-                        selectedAccountId = defaultAccId,
+                        selectedAccountId = actualDefaultAccId,
+                        selectedToAccountId = defaultToAccId,
                         categories = filteredCats,
                         selectedCategoryId = selectedCatId,
                         recentPersonNames = recentNames
@@ -181,6 +221,33 @@ class PreConfirmViewModel(
         _uiState.update { it.copy(selectedAccountId = accountId) }
     }
 
+    fun setSelectedToAccount(accountId: Long?) {
+        _uiState.update { it.copy(selectedToAccountId = accountId) }
+    }
+
+    fun setTransferFeeAmount(fee: Long) {
+        _uiState.update { it.copy(transferFeeAmount = maxOf(0L, fee)) }
+    }
+
+    fun applyDetectedTransfer() {
+        val transfer = _uiState.value.detectedTransfer ?: return
+        val allAccs = _uiState.value.accounts
+        val srcAccId = transfer.sourceAccount?.id ?: _uiState.value.selectedAccountId ?: allAccs.firstOrNull()?.id
+        val destAccId = transfer.destAccount?.id ?: allAccs.find { it.id != srcAccId }?.id
+
+        _uiState.update {
+            it.copy(
+                transactionType = TransactionType.TRANSFER,
+                amount = transfer.transferAmount,
+                selectedAccountId = srcAccId,
+                selectedToAccountId = destAccId,
+                transferFeeAmount = transfer.feeAmount,
+                smsHash = "${transfer.withdrawalItem.smsHash}|${transfer.depositItem.smsHash}",
+                note = "انتقال از ${transfer.sourceAccount?.name ?: "بانک مبدأ"} به ${transfer.destAccount?.name ?: "بانک مقصد"}"
+            )
+        }
+    }
+
     fun setSelectedCategory(categoryId: Long) {
         _uiState.update { it.copy(selectedCategoryId = categoryId) }
     }
@@ -199,16 +266,26 @@ class PreConfirmViewModel(
                     else -> true
                 }
             }
-            _uiState.update {
-                it.copy(
+            _uiState.update { current ->
+                val toAcc = if (type == TransactionType.TRANSFER && current.selectedToAccountId == null) {
+                    current.accounts.find { it.id != current.selectedAccountId }?.id
+                } else current.selectedToAccountId
+
+                val defaultNote = if (type == TransactionType.TRANSFER && (current.note.isBlank() || current.note.contains("برداشت") || current.note.contains("واریز"))) {
+                    "انتقال بین حساب‌ها"
+                } else current.note
+
+                current.copy(
                     transactionType = type,
+                    selectedToAccountId = toAcc,
+                    note = defaultNote,
                     categories = filteredCats,
-                    selectedCategoryId = if (filteredCats.any { c -> c.id == it.selectedCategoryId }) {
-                        it.selectedCategoryId
+                    selectedCategoryId = if (filteredCats.any { c -> c.id == current.selectedCategoryId }) {
+                        current.selectedCategoryId
                     } else {
                         filteredCats.firstOrNull()?.id
                     },
-                    isGroupExpenseEnabled = if (type == TransactionType.EXPENSE) it.isGroupExpenseEnabled else false
+                    isGroupExpenseEnabled = if (type == TransactionType.EXPENSE) current.isGroupExpenseEnabled else false
                 )
             }
 
@@ -316,12 +393,67 @@ class PreConfirmViewModel(
         val currentState = _uiState.value
         val amt = currentState.amount
         val accId = currentState.selectedAccountId
+        val toAccId = currentState.selectedToAccountId
         val catId = currentState.selectedCategoryId
 
         if (amt <= 0L) {
             _uiState.update { it.copy(errorMessage = "مبلغ معتبر نیست") }
             return
         }
+
+        if (currentState.transactionType == TransactionType.TRANSFER) {
+            if (accId == null) {
+                _uiState.update { it.copy(errorMessage = "لطفاً حساب مبدأ را انتخاب کنید") }
+                return
+            }
+            if (toAccId == null) {
+                _uiState.update { it.copy(errorMessage = "لطفاً حساب مقصد را انتخاب کنید") }
+                return
+            }
+            if (accId == toAccId) {
+                _uiState.update { it.copy(errorMessage = "حساب مبدأ و مقصد نمی‌توانند یکسان باشند") }
+                return
+            }
+
+            viewModelScope.launch {
+                try {
+                    val transferTx = TransactionEntity(
+                        type = TransactionType.TRANSFER,
+                        amount = amt,
+                        accountId = accId,
+                        toAccountId = toAccId,
+                        date = currentState.dateTimestamp,
+                        note = currentState.note.ifBlank { "انتقال بین حساب‌ها" },
+                        smsHash = currentState.smsHash.ifBlank { null }
+                    )
+                    addTransactionUseCase(transferTx)
+
+                    if (currentState.transferFeeAmount > 0L) {
+                        val allCats = try { categoryRepository.allCategories.first() } catch (e: Exception) { emptyList() }
+                        val feeCatId = allCats.find {
+                            it.name.contains("کارمزد") || it.name.contains("خدمات")
+                        }?.id ?: allCats.firstOrNull()?.id
+
+                        val feeTx = TransactionEntity(
+                            type = TransactionType.EXPENSE,
+                            amount = currentState.transferFeeAmount,
+                            accountId = accId,
+                            categoryId = feeCatId,
+                            date = currentState.dateTimestamp,
+                            note = "کارمزد انتقال بین حساب‌ها",
+                            smsHash = if (currentState.smsHash.isNotBlank()) "${currentState.smsHash}_fee" else null
+                        )
+                        addTransactionUseCase(feeTx)
+                    }
+
+                    _uiState.update { it.copy(isSavedSuccess = true) }
+                } catch (e: Exception) {
+                    _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "خطا در ذخیره‌سازی انتقال") }
+                }
+            }
+            return
+        }
+
         if (accId == null) {
             _uiState.update { it.copy(errorMessage = "لطفاً حساب را انتخاب کنید") }
             return
@@ -408,6 +540,19 @@ class PreConfirmViewModel(
 
     fun quickSaveTransaction() {
         val currentState = _uiState.value
+        if (currentState.transactionType == TransactionType.TRANSFER) {
+            if (currentState.selectedAccountId == null && currentState.accounts.isNotEmpty()) {
+                _uiState.update { it.copy(selectedAccountId = currentState.accounts.first().id) }
+            }
+            if (_uiState.value.selectedToAccountId == null && currentState.accounts.size > 1) {
+                val srcId = _uiState.value.selectedAccountId
+                val destId = currentState.accounts.find { it.id != srcId }?.id
+                _uiState.update { it.copy(selectedToAccountId = destId) }
+            }
+            saveTransaction()
+            return
+        }
+
         if (currentState.selectedCategoryId == null && currentState.categories.isNotEmpty()) {
             val guessed = com.example.util.CategoryGuesser.guessCategoryId("${currentState.note} ${currentState.bankName}", currentState.categories)
             val finalCatId = guessed ?: currentState.categories.first().id

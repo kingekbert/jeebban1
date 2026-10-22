@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -77,7 +78,9 @@ import com.example.data.local.entity.TransactionType
 import com.example.ui.theme.ExpenseColor
 import com.example.ui.theme.IncomeColor
 import com.example.util.AmountFormatter
+import com.example.util.BankLogoBadge
 import com.example.util.DateFormatter
+import com.example.util.DetectedTransfer
 import com.example.util.toPersianDigits
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -437,6 +440,54 @@ fun ScanSmsScreen(
                         }
                     }
                 } else {
+                    if (state.detectedTransfers.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "انتقال‌های بین حسابی شناسایی شده (${state.detectedTransfers.size})".toPersianDigits(),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        itemsIndexed(state.detectedTransfers, key = { index, tr -> "transfer_${tr.id}_$index" }) { _, transfer ->
+                            DetectedTransferCard(
+                                transfer = transfer,
+                                onRegisterClick = {
+                                    try {
+                                        ScanSmsDataHolder.detectedTransfer = transfer
+                                        ScanSmsDataHolder.openAsTransfer = true
+                                        ScanSmsDataHolder.selectedItem = transfer.withdrawalItem
+                                        sharedScanViewModel.setPendingScanItem(transfer.withdrawalItem)
+                                        onNavigateToPreConfirm()
+                                    } catch (e: Throwable) {
+                                        Log.e("ScanSmsScreen", "Crash opening pre_confirm transfer", e)
+                                        Toast.makeText(context, "خطا در باز کردن صفحه", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onLongClick = {
+                                    rawSmsDialogText = "پیامک برداشت:\n${transfer.withdrawalItem.rawText}\n\nپیامک واریز:\n${transfer.depositItem.rawText}"
+                                }
+                            )
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+                    }
+
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -452,10 +503,21 @@ fun ScanSmsScreen(
                     }
 
                     itemsIndexed(state.scannedList, key = { index, it -> "${it.id}_$index" }) { _, item ->
+                        val matchingTransfer = state.detectedTransfers.find {
+                            it.withdrawalItem.id == item.id || it.depositItem.id == item.id
+                        }
                         ScannedSmsCard(
                             item = item,
+                            matchingTransfer = matchingTransfer,
                             onAddClick = {
                                 try {
+                                    if (matchingTransfer != null && !matchingTransfer.isRegistered) {
+                                        ScanSmsDataHolder.detectedTransfer = matchingTransfer
+                                        ScanSmsDataHolder.openAsTransfer = true
+                                    } else {
+                                        ScanSmsDataHolder.detectedTransfer = null
+                                        ScanSmsDataHolder.openAsTransfer = false
+                                    }
                                     sharedScanViewModel.setPendingScanItem(item)
                                     ScanSmsDataHolder.selectedItem = item
                                     onNavigateToPreConfirm()
@@ -477,8 +539,259 @@ fun ScanSmsScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+fun DetectedTransferCard(
+    transfer: DetectedTransfer,
+    onRegisterClick: () -> Unit,
+    onLongClick: () -> Unit = {}
+) {
+    val isDark = isSystemInDarkTheme()
+    val isRegistered = transfer.isRegistered
+
+    val cardBg = if (isRegistered) {
+        if (isDark) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f) else Color(0xFFF1F3F5)
+    } else {
+        if (isDark) MaterialTheme.colorScheme.surface else Color.White
+    }
+
+    val cardBorder = if (isRegistered) {
+        androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    } else {
+        androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+    }
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(
+                onClick = {
+                    if (!isRegistered) {
+                        onRegisterClick()
+                    }
+                },
+                onLongClick = onLongClick
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        border = cardBorder,
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isRegistered) 0.dp else 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Header Row: Title & Badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                        contentDescription = null,
+                        tint = if (isRegistered) MaterialTheme.colorScheme.onSurfaceVariant else primaryColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "انتقال بین حساب‌ها",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isRegistered) MaterialTheme.colorScheme.onSurfaceVariant else primaryColor
+                    )
+                }
+
+                if (isRegistered) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isDark) Color(0xFF1E3320) else Color(0xFFE8F5E9))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = if (isDark) Color(0xFF81C784) else Color(0xFF2E7D32),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "ثبت‌شده",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isDark) Color(0xFF81C784) else Color(0xFF2E7D32),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(primaryColor.copy(alpha = 0.15f))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "شناسایی شد",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = primaryColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // Transfer details: Source -> Destination
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                    .padding(10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Source (مبدأ)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "مبدأ (برداشت):",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ExpenseColor
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        BankLogoBadge(
+                            bankId = transfer.sourceAccount?.logoResName,
+                            accountName = transfer.sourceAccount?.name ?: transfer.withdrawalItem.parsedSms.bankName,
+                            cardNumber = transfer.sourceAccount?.cardNumber,
+                            size = 20.dp,
+                            shapeRadius = 4.dp
+                        )
+                        Text(
+                            text = transfer.sourceAccount?.name ?: transfer.withdrawalItem.parsedSms.bankName ?: "بانک مبدأ",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = DateFormatter.formatLong(transfer.withdrawalItem.date),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Arrow icon
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    tint = primaryColor,
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                )
+
+                // Destination (مقصد)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = "مقصد (واریز):",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = IncomeColor
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = transfer.destAccount?.name ?: transfer.depositItem.parsedSms.bankName ?: "بانک مقصد",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        BankLogoBadge(
+                            bankId = transfer.destAccount?.logoResName,
+                            accountName = transfer.destAccount?.name ?: transfer.depositItem.parsedSms.bankName,
+                            cardNumber = transfer.destAccount?.cardNumber,
+                            size = 20.dp,
+                            shapeRadius = 4.dp
+                        )
+                    }
+                    Text(
+                        text = DateFormatter.formatLong(transfer.depositItem.date),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Amount & Fee
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "مبلغ انتقال:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = AmountFormatter.formatRial(transfer.transferAmount),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = primaryColor
+                    )
+                }
+
+                if (transfer.feeAmount > 0L) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "کارمزد بانکی:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ExpenseColor
+                        )
+                        Text(
+                            text = AmountFormatter.formatRial(transfer.feeAmount),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ExpenseColor
+                        )
+                    }
+                }
+            }
+
+            // Action Button
+            if (!isRegistered) {
+                Button(
+                    onClick = onRegisterClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("ثبت این انتقال بین حساب‌ها", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 fun ScannedSmsCard(
     item: ScannedSmsItem,
+    matchingTransfer: DetectedTransfer? = null,
     onAddClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
@@ -569,6 +882,32 @@ fun ScannedSmsCard(
                         )
                     }
                     Spacer(modifier = Modifier.width(6.dp))
+
+                    if (matchingTransfer != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "انتقال بین حسابی",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
 
                     if (item.isRegistered) {
                         // برچسب «ثبت‌شده» خوانا و باکلاس با آیکون تیک سبز

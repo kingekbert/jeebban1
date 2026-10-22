@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -66,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.entity.GroupExpenseShareMode
 import com.example.data.local.entity.TransactionType
@@ -292,11 +295,70 @@ fun PreConfirmScreen(
                 }
             }
 
+            // 1.5 Smart Suggestion: Convert to Transfer if detected transfer available
+            if (state.detectedTransfer != null && state.transactionType != TransactionType.TRANSFER) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "پیشنهاد هوشمند: انتقال بین حساب‌ها",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Text(
+                                text = "این پیامک هم‌زمان با پیامک دیگری به عنوان انتقال بین حساب‌ها شناسایی شده است. مایلید به عنوان انتقال بین حساب‌ها ثبت شود؟",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Button(
+                                onClick = { viewModel.applyDetectedTransfer() },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("تبدیل به انتقال بین حساب‌ها")
+                            }
+                        }
+                    }
+                }
+            }
+
             // 2. Transaction Summary Card
             item {
-                val isExpense = state.transactionType != TransactionType.INCOME
-                val typeText = if (isExpense) "هزینه" else "درآمد"
-                val typeColor = if (isExpense) ExpenseColor else IncomeColor
+                val isTransfer = state.transactionType == TransactionType.TRANSFER
+                val isExpense = state.transactionType == TransactionType.EXPENSE
+                val typeText = when (state.transactionType) {
+                    TransactionType.EXPENSE -> "هزینه (برداشت)"
+                    TransactionType.INCOME -> "درآمد (واریز)"
+                    TransactionType.TRANSFER -> "انتقال بین حساب‌ها"
+                }
+                val typeColor = when (state.transactionType) {
+                    TransactionType.EXPENSE -> ExpenseColor
+                    TransactionType.INCOME -> IncomeColor
+                    TransactionType.TRANSFER -> MaterialTheme.colorScheme.primary
+                }
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -316,7 +378,7 @@ fun PreConfirmScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = state.bankName ?: "اطلاعات پیامک",
+                                text = if (isTransfer) "انتقال بین حساب‌ها" else (state.bankName ?: "اطلاعات پیامک"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -336,31 +398,45 @@ fun PreConfirmScreen(
                             }
                         }
 
-                        // Expense / Income Toggle Tabs
+                        // Expense / Income / Transfer Toggle Tabs
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Button(
                                 onClick = { viewModel.setTransactionType(TransactionType.EXPENSE) },
                                 modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (state.transactionType == TransactionType.EXPENSE) ExpenseColor else MaterialTheme.colorScheme.surfaceVariant,
                                     contentColor = if (state.transactionType == TransactionType.EXPENSE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
-                                Text("هزینه (برداشت)")
+                                Text("هزینه", fontSize = 12.sp)
                             }
 
                             Button(
                                 onClick = { viewModel.setTransactionType(TransactionType.INCOME) },
                                 modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (state.transactionType == TransactionType.INCOME) IncomeColor else MaterialTheme.colorScheme.surfaceVariant,
                                     contentColor = if (state.transactionType == TransactionType.INCOME) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
-                                Text("درآمد (واریز)")
+                                Text("درآمد", fontSize = 12.sp)
+                            }
+
+                            Button(
+                                onClick = { viewModel.setTransactionType(TransactionType.TRANSFER) },
+                                modifier = Modifier.weight(1.1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (state.transactionType == TransactionType.TRANSFER) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (state.transactionType == TransactionType.TRANSFER) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            ) {
+                                Text("انتقال حسابی", fontSize = 11.sp)
                             }
                         }
 
@@ -370,6 +446,27 @@ fun PreConfirmScreen(
                             fontWeight = FontWeight.Bold,
                             color = typeColor
                         )
+
+                        // If transfer with fee, display fee info
+                        if (isTransfer && state.transferFeeAmount > 0L) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = ExpenseColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "کارمزد بانکی: ${AmountFormatter.formatRial(state.transferFeeAmount)} (از مبدأ کسر می‌شود)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ExpenseColor,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
 
                         // Date and Time Selectors
                         Row(
@@ -416,10 +513,9 @@ fun PreConfirmScreen(
                 }
             }
 
-            // 3. Account Selector Card
+            // 3. Account Selector(s) Card
             item {
-                var expanded by remember { mutableStateOf(false) }
-                val selectedAccount = state.accounts.find { it.id == state.selectedAccountId }
+                val isTransfer = state.transactionType == TransactionType.TRANSFER
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -431,79 +527,265 @@ fun PreConfirmScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text(
-                            text = "انتخاب حساب",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        if (isTransfer) {
+                            // Transfer: Source Account + Destination Account
+                            Text(
+                                text = "حساب‌های انتقال",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
 
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { expanded = true },
-                                shape = RoundedCornerShape(12.dp)
+                            // Source Account Picker
+                            var srcExpanded by remember { mutableStateOf(false) }
+                            val srcAccount = state.accounts.find { it.id == state.selectedAccountId }
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "حساب مبدأ (برداشت از):",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = ExpenseColor,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedCard(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { srcExpanded = true },
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (srcAccount != null) {
+                                                BankLogoBadge(
+                                                    bankId = srcAccount.logoResName,
+                                                    accountName = srcAccount.name,
+                                                    cardNumber = srcAccount.cardNumber,
+                                                    size = 28.dp,
+                                                    shapeRadius = 6.dp
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Default.AccountBalance,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text(
+                                                text = srcAccount?.name ?: "انتخاب حساب مبدأ...",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowDropDown,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = srcExpanded,
+                                        onDismissRequest = { srcExpanded = false },
+                                        modifier = Modifier.fillMaxWidth(0.9f)
+                                    ) {
+                                        state.accounts.forEach { acc ->
+                                            DropdownMenuItem(
+                                                text = { Text(acc.name, fontWeight = FontWeight.Medium) },
+                                                leadingIcon = {
+                                                    BankLogoBadge(
+                                                        bankId = acc.logoResName,
+                                                        accountName = acc.name,
+                                                        cardNumber = acc.cardNumber,
+                                                        size = 24.dp,
+                                                        shapeRadius = 6.dp
+                                                    )
+                                                },
+                                                onClick = {
+                                                    viewModel.setSelectedAccount(acc.id)
+                                                    srcExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Downward arrow indicator between accounts
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            // Destination Account Picker
+                            var destExpanded by remember { mutableStateOf(false) }
+                            val destAccount = state.accounts.find { it.id == state.selectedToAccountId }
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "حساب مقصد (واریز به):",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = IncomeColor,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedCard(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { destExpanded = true },
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (destAccount != null) {
+                                                BankLogoBadge(
+                                                    bankId = destAccount.logoResName,
+                                                    accountName = destAccount.name,
+                                                    cardNumber = destAccount.cardNumber,
+                                                    size = 28.dp,
+                                                    shapeRadius = 6.dp
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Default.AccountBalance,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text(
+                                                text = destAccount?.name ?: "انتخاب حساب مقصد...",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowDropDown,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = destExpanded,
+                                        onDismissRequest = { destExpanded = false },
+                                        modifier = Modifier.fillMaxWidth(0.9f)
+                                    ) {
+                                        state.accounts.forEach { acc ->
+                                            DropdownMenuItem(
+                                                text = { Text(acc.name, fontWeight = FontWeight.Medium) },
+                                                leadingIcon = {
+                                                    BankLogoBadge(
+                                                        bankId = acc.logoResName,
+                                                        accountName = acc.name,
+                                                        cardNumber = acc.cardNumber,
+                                                        size = 24.dp,
+                                                        shapeRadius = 6.dp
+                                                    )
+                                                },
+                                                onClick = {
+                                                    viewModel.setSelectedToAccount(acc.id)
+                                                    destExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Standard Single Account Picker
+                            Text(
+                                text = "انتخاب حساب",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            var expanded by remember { mutableStateOf(false) }
+                            val selectedAccount = state.accounts.find { it.id == state.selectedAccountId }
+
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                OutlinedCard(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .clickable { expanded = true },
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    if (selectedAccount != null) {
-                                        BankLogoBadge(
-                                            bankId = selectedAccount.logoResName,
-                                            accountName = selectedAccount.name,
-                                            cardNumber = selectedAccount.cardNumber,
-                                            size = 28.dp,
-                                            shapeRadius = 6.dp
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (selectedAccount != null) {
+                                            BankLogoBadge(
+                                                bankId = selectedAccount.logoResName,
+                                                accountName = selectedAccount.name,
+                                                cardNumber = selectedAccount.cardNumber,
+                                                size = 28.dp,
+                                                shapeRadius = 6.dp
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.AccountBalance,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = selectedAccount?.name ?: "انتخاب حساب...",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.weight(1f)
                                         )
-                                    } else {
                                         Icon(
-                                            imageVector = Icons.Default.AccountBalance,
+                                            imageVector = Icons.Default.ArrowDropDown,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = selectedAccount?.name ?: "انتخاب حساب...",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
                                 }
-                            }
 
-                            DropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false },
-                                modifier = Modifier.fillMaxWidth(0.9f)
-                            ) {
-                                state.accounts.forEach { acc ->
-                                    DropdownMenuItem(
-                                        text = { Text(acc.name, fontWeight = FontWeight.Medium) },
-                                        leadingIcon = {
-                                            BankLogoBadge(
-                                                bankId = acc.logoResName,
-                                                accountName = acc.name,
-                                                cardNumber = acc.cardNumber,
-                                                size = 24.dp,
-                                                shapeRadius = 6.dp
-                                            )
-                                        },
-                                        onClick = {
-                                            viewModel.setSelectedAccount(acc.id)
-                                            expanded = false
-                                        }
-                                    )
+                                DropdownMenu(
+                                    expanded = expanded,
+                                    onDismissRequest = { expanded = false },
+                                    modifier = Modifier.fillMaxWidth(0.9f)
+                                ) {
+                                    state.accounts.forEach { acc ->
+                                        DropdownMenuItem(
+                                            text = { Text(acc.name, fontWeight = FontWeight.Medium) },
+                                            leadingIcon = {
+                                                BankLogoBadge(
+                                                    bankId = acc.logoResName,
+                                                    accountName = acc.name,
+                                                    cardNumber = acc.cardNumber,
+                                                    size = 24.dp,
+                                                    shapeRadius = 6.dp
+                                                )
+                                            },
+                                            onClick = {
+                                                viewModel.setSelectedAccount(acc.id)
+                                                expanded = false
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -511,32 +793,34 @@ fun PreConfirmScreen(
                 }
             }
 
-            // 4. Category Picker Card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+            // 4. Category Picker Card (Only for EXPENSE / INCOME)
+            if (state.transactionType != TransactionType.TRANSFER) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
-                        Text(
-                            text = "دسته تراکنش (الزامی)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "دسته تراکنش (الزامی)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
 
-                        CategoryPicker(
-                            categories = state.categories,
-                            selectedCategoryId = state.selectedCategoryId,
-                            onCategorySelected = { category -> viewModel.setSelectedCategory(category.id) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                            CategoryPicker(
+                                categories = state.categories,
+                                selectedCategoryId = state.selectedCategoryId,
+                                onCategorySelected = { category -> viewModel.setSelectedCategory(category.id) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
             }
@@ -868,7 +1152,7 @@ fun PreConfirmScreen(
                         Icon(imageVector = Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "ثبت سریع",
+                            text = if (state.transactionType == TransactionType.TRANSFER) "ثبت سریع انتقال" else "ثبت سریع",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -884,7 +1168,7 @@ fun PreConfirmScreen(
                         Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "ثبت عادی",
+                            text = if (state.transactionType == TransactionType.TRANSFER) "ثبت انتقال" else "ثبت عادی",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

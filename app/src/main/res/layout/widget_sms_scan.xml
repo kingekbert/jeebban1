@@ -49,16 +49,6 @@
                 android:textColor="@color/widget_subtitle_color"
                 android:textSize="10.5sp" />
         </LinearLayout>
-
-        <!-- Moon / Sun Manual Theme Toggle Button -->
-        <ImageView
-            android:id="@+id/widget_btn_theme_toggle"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:layout_marginStart="6dp"
-            android:padding="3dp"
-            android:src="@drawable/ic_widget_moon"
-            android:contentDescription="تغییر تم ویجت" />
     </LinearLayout>
 
     <!-- Scan Trigger Button (Works 100% in background on home screen) -->

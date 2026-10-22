@@ -24,5 +24,27 @@ object BankUtils {
             else -> R.drawable.ic_bank_default
         }
     }
+
+    fun getNormalizedBankKey(bankName: String?): String? {
+        if (bankName.isNullOrBlank()) return null
+        val n = bankName.lowercase()
+        return when {
+            n.contains("کشاورزی") || n.contains("keshavarzi") -> "keshavarzi"
+            n.contains("مسکن") || n.contains("maskan") -> "maskan"
+            n.contains("مهر") || n.contains("mehr") -> "mehr"
+            n.contains("ملت") || n.contains("mellat") -> "mellat"
+            n.contains("ملی") || n.contains("melli") -> "melli"
+            n.contains("پارسیان") || n.contains("parsian") -> "parsian"
+            n.contains("پاسارگاد") || n.contains("pasargad") -> "pasargad"
+            n.contains("رفاه") || n.contains("refah") -> "refah"
+            n.contains("رسالت") || n.contains("resalat") -> "resalat"
+            n.contains("صادرات") || n.contains("saderat") -> "saderat"
+            n.contains("سامان") || n.contains("saman") -> "saman"
+            n.contains("سپه") || n.contains("sepah") -> "sepah"
+            n.contains("سینا") || n.contains("sina") -> "sina"
+            n.contains("تجارت") || n.contains("tejarat") -> "tejarat"
+            else -> null
+        }
+    }
 }
 

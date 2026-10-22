@@ -3,7 +3,7 @@ package com.example.util
 import android.content.Context
 import android.content.SharedPreferences
 
-class Preferences(context: Context) {
+class Preferences(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(
         Constants.PREFS_NAME,
         Context.MODE_PRIVATE
@@ -27,7 +27,14 @@ class Preferences(context: Context) {
 
     var themeMode: String
         get() = prefs.getString(Constants.KEY_THEME_MODE, "SYSTEM") ?: "SYSTEM"
-        set(value) = prefs.edit().putString(Constants.KEY_THEME_MODE, value).apply()
+        set(value) {
+            prefs.edit().putString(Constants.KEY_THEME_MODE, value).apply()
+            try {
+                com.example.widget.WidgetStatusHelper.updateAllWidgets(context)
+            } catch (e: Exception) {
+                // Ignore widget update failures
+            }
+        }
 
     var lastBackupTime: Long
         get() = prefs.getLong(Constants.KEY_LAST_BACKUP_TIME, 0L)

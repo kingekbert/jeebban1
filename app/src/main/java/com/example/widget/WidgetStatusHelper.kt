@@ -26,7 +26,6 @@ object WidgetStatusHelper {
     private const val PREFS_NAME = "jeebban_widget_prefs"
     private const val KEY_LAST_SCAN_TIME = "last_scan_time"
     private const val KEY_LAST_NEW_COUNT = "last_new_count"
-    private const val KEY_WIDGET_THEME_OVERRIDE = "widget_theme_override"
     private const val KEY_CATEGORY_PAGE = "widget_category_page"
 
     fun getCategoryPage(context: Context): Int {
@@ -187,11 +186,6 @@ object WidgetStatusHelper {
 
     fun isDarkThemeActive(context: Context): Boolean {
         return try {
-            val widgetPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val widgetOverride = widgetPrefs.getString(KEY_WIDGET_THEME_OVERRIDE, null)
-            if (widgetOverride == "DARK") return true
-            if (widgetOverride == "LIGHT") return false
-
             val prefs = context.getSharedPreferences(com.example.util.Constants.PREFS_NAME, Context.MODE_PRIVATE)
             val mode = prefs.getString(com.example.util.Constants.KEY_THEME_MODE, "SYSTEM") ?: "SYSTEM"
             when (mode) {
@@ -204,24 +198,6 @@ object WidgetStatusHelper {
             }
         } catch (e: Exception) {
             false
-        }
-    }
-
-    fun toggleWidgetTheme(context: Context) {
-        try {
-            val currentIsDark = isDarkThemeActive(context)
-            val newIsDark = !currentIsDark
-            val newMode = if (newIsDark) "DARK" else "LIGHT"
-
-            val widgetPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            widgetPrefs.edit().putString(KEY_WIDGET_THEME_OVERRIDE, newMode).apply()
-
-            val appPrefs = context.getSharedPreferences(com.example.util.Constants.PREFS_NAME, Context.MODE_PRIVATE)
-            appPrefs.edit().putString(com.example.util.Constants.KEY_THEME_MODE, newMode).apply()
-
-            updateAllWidgets(context)
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
@@ -249,7 +225,6 @@ object WidgetStatusHelper {
         val statusColor = if (isDark) 0xFFB0B0B0.toInt() else 0xFF556B5C.toInt()
         val emptyNormalColor = if (isDark) 0xFF81C784.toInt() else 0xFF1B5E20.toInt()
         val emptySuccessColor = if (isDark) 0xFF66BB6A.toInt() else 0xFF2E7D32.toInt()
-        val themeIconRes = if (isDark) R.drawable.ic_widget_sun else R.drawable.ic_widget_moon
         val containerBgRes = if (isDark) R.drawable.widget_bg_dark else R.drawable.widget_bg_light
 
         val catPage = getCategoryPage(context)
@@ -282,19 +257,6 @@ object WidgetStatusHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.widget_header, appPendingIntent)
-
-            // 1.1 Theme Toggle Button (Moon/Sun icon)
-            val themeIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
-                action = SmsScanWidgetProvider.ACTION_TOGGLE_THEME
-            }
-            val themePendingIntent = PendingIntent.getBroadcast(
-                context,
-                250,
-                themeIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setImageViewResource(R.id.widget_btn_theme_toggle, themeIconRes)
-            views.setOnClickPendingIntent(R.id.widget_btn_theme_toggle, themePendingIntent)
 
             // 2. Scan Button: 100% Background Scan via Broadcast
             val scanIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {

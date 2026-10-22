@@ -14,7 +14,6 @@ class SmsScanWidgetProvider : AppWidgetProvider() {
         const val ACTION_TRIGGER_SCAN = "com.example.widget.ACTION_TRIGGER_SCAN"
         const val ACTION_ITEM_CLICK = "com.example.widget.ACTION_ITEM_CLICK"
         const val ACTION_REGISTER_ITEM = "com.example.widget.ACTION_REGISTER_ITEM"
-        const val ACTION_TOGGLE_THEME = "com.example.widget.ACTION_TOGGLE_THEME"
         const val ACTION_SWITCH_CATEGORY_PAGE = "com.example.widget.ACTION_SWITCH_CATEGORY_PAGE"
     }
 
@@ -22,9 +21,6 @@ class SmsScanWidgetProvider : AppWidgetProvider() {
         when (intent.action) {
             ACTION_SWITCH_CATEGORY_PAGE -> {
                 WidgetStatusHelper.toggleCategoryPage(context)
-            }
-            ACTION_TOGGLE_THEME -> {
-                WidgetStatusHelper.toggleWidgetTheme(context)
             }
             ACTION_TRIGGER_SCAN -> {
                 val pendingResult = goAsync()
