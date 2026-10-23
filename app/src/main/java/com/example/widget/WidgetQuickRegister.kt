@@ -118,8 +118,11 @@ object WidgetQuickRegister {
             }
 
             if (isSavedSuccess) {
-                // Remove item from unregistered widget items cache
                 val remaining = WidgetDataStore.removeItem(context, smsHash)
+                val curIdx = WidgetStatusHelper.getCurrentTransactionIndex(context)
+                if (curIdx >= remaining.size) {
+                    WidgetStatusHelper.setCurrentTransactionIndex(context, maxOf(0, remaining.size - 1))
+                }
                 WidgetStatusHelper.saveScanResult(context, remaining.size)
                 WidgetStatusHelper.updateAllWidgets(context)
 

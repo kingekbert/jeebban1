@@ -77,7 +77,7 @@ class AppModule(private val context: Context) {
     }
 
     val addTransactionUseCase: AddTransactionUseCase by lazy {
-        AddTransactionUseCase(transactionRepository)
+        AddTransactionUseCase(transactionRepository, categoryRepository, debtRepository)
     }
 
     val getDashboardDataUseCase: GetDashboardDataUseCase by lazy {

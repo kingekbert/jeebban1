@@ -6,6 +6,7 @@ import com.example.data.local.entity.AccountEntity
 import com.example.data.local.entity.AccountType
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.CategoryType
+import kotlinx.coroutines.flow.firstOrNull
 
 object SeedData {
     val defaultCategories = listOf(
@@ -74,8 +75,16 @@ object SeedData {
             icon = "more_horiz",
             isDefault = true
         ),
+        CategoryEntity(
+            id = 13,
+            name = "قرض دادن",
+            type = CategoryType.EXPENSE,
+            color = 0xFF3F51B5.toInt(), // Indigo
+            icon = "handshake",
+            isDefault = true
+        ),
 
-        // Income Categories (4)
+        // Income Categories (5)
         CategoryEntity(
             id = 9,
             name = "حقوق",
@@ -107,6 +116,14 @@ object SeedData {
             color = 0xFF009688.toInt(), // Teal
             icon = "attach_money",
             isDefault = true
+        ),
+        CategoryEntity(
+            id = 14,
+            name = "قرض گرفتن",
+            type = CategoryType.INCOME,
+            color = 0xFF673AB7.toInt(), // Deep Purple
+            icon = "handshake",
+            isDefault = true
         )
     )
 
@@ -122,5 +139,39 @@ object SeedData {
     suspend fun insertDefaults(accountDao: AccountDao, categoryDao: CategoryDao) {
         accountDao.insert(defaultAccount)
         categoryDao.insertAll(defaultCategories)
+    }
+
+    suspend fun ensureDebtCategories(categoryDao: CategoryDao) {
+        try {
+            val existing = categoryDao.getAll().firstOrNull() ?: emptyList()
+            val hasLending = existing.any { it.name.trim() == "قرض دادن" }
+            if (!hasLending) {
+                categoryDao.insert(
+                    CategoryEntity(
+                        id = 0,
+                        name = "قرض دادن",
+                        type = CategoryType.EXPENSE,
+                        color = 0xFF3F51B5.toInt(),
+                        icon = "handshake",
+                        isDefault = true
+                    )
+                )
+            }
+            val hasBorrowing = existing.any { it.name.trim() == "قرض گرفتن" }
+            if (!hasBorrowing) {
+                categoryDao.insert(
+                    CategoryEntity(
+                        id = 0,
+                        name = "قرض گرفتن",
+                        type = CategoryType.INCOME,
+                        color = 0xFF673AB7.toInt(),
+                        icon = "handshake",
+                        isDefault = true
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

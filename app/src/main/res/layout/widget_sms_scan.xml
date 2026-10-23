@@ -154,21 +154,58 @@
                         android:textSize="10sp" />
                 </LinearLayout>
 
-                <!-- Counter Badge (e.g. ۱ از ۳) -->
-                <TextView
-                    android:id="@+id/tv_widget_tx_counter"
+                <!-- Navigation & Counter Controls -->
+                <LinearLayout
+                    android:id="@+id/widget_nav_container"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
-                    android:background="@drawable/widget_badge_bg"
-                    android:paddingStart="6dp"
-                    android:paddingTop="2dp"
-                    android:paddingEnd="6dp"
-                    android:paddingBottom="2dp"
-                    android:text="۱ از ۳"
-                    android:textColor="@color/widget_title_color"
-                    android:textSize="10sp"
-                    android:textStyle="bold" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!-- Prev Transaction Button (▶) -->
+                    <TextView
+                        android:id="@+id/btn_widget_prev_tx"
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:background="@drawable/widget_cat_more_btn_bg"
+                        android:gravity="center"
+                        android:text="▶"
+                        android:textColor="@color/widget_title_color"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:contentDescription="تراکنش قبلی" />
+
+                    <!-- Counter Badge (e.g. ۱ از ۳) -->
+                    <TextView
+                        android:id="@+id/tv_widget_tx_counter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/widget_badge_bg"
+                        android:paddingStart="6dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="2dp"
+                        android:text="۱ از ۳"
+                        android:textColor="@color/widget_title_color"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <!-- Next Transaction Button (◀) -->
+                    <TextView
+                        android:id="@+id/btn_widget_next_tx"
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:background="@drawable/widget_cat_more_btn_bg"
+                        android:gravity="center"
+                        android:text="◀"
+                        android:textColor="@color/widget_title_color"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:contentDescription="تراکنش بعدی" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- Middle Row: SMS Description / Note snippet -->

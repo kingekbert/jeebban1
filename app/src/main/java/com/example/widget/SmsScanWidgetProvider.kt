@@ -15,10 +15,18 @@ class SmsScanWidgetProvider : AppWidgetProvider() {
         const val ACTION_ITEM_CLICK = "com.example.widget.ACTION_ITEM_CLICK"
         const val ACTION_REGISTER_ITEM = "com.example.widget.ACTION_REGISTER_ITEM"
         const val ACTION_SWITCH_CATEGORY_PAGE = "com.example.widget.ACTION_SWITCH_CATEGORY_PAGE"
+        const val ACTION_NEXT_TX = "com.example.widget.ACTION_NEXT_TX"
+        const val ACTION_PREV_TX = "com.example.widget.ACTION_PREV_TX"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
+            ACTION_NEXT_TX -> {
+                WidgetStatusHelper.nextTransaction(context)
+            }
+            ACTION_PREV_TX -> {
+                WidgetStatusHelper.prevTransaction(context)
+            }
             ACTION_SWITCH_CATEGORY_PAGE -> {
                 WidgetStatusHelper.toggleCategoryPage(context)
             }

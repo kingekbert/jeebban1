@@ -36,8 +36,12 @@ object WidgetDataStore {
 
     @Synchronized
     fun removeItem(context: Context, smsHash: String): List<ScannedSmsItem> {
+        if (smsHash.isBlank()) return getItems(context)
+        val targetHashes = smsHash.split("|").map { it.trim() }.filter { it.isNotBlank() }.toSet()
         val current = getItems(context).toMutableList()
-        current.removeAll { it.smsHash == smsHash }
+        current.removeAll { item ->
+            item.smsHash == smsHash || targetHashes.contains(item.smsHash) || smsHash.contains(item.smsHash)
+        }
         saveItems(context, current)
         return current
     }

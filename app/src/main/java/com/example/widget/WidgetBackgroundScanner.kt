@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.example.FinTrackApp
 import com.example.MainActivity
+import com.example.data.local.entity.TransactionType
 import com.example.ui.screens.scan_sms.ScannedSmsItem
 import com.example.util.JalaliDate
 import com.example.util.SmsHashUtil
@@ -111,8 +112,12 @@ object WidgetBackgroundScanner {
 
                         val isRegistered = existingTransactions.any { txItem ->
                             val tx = txItem.transaction
-                            if (!tx.smsHash.isNullOrBlank() && (tx.smsHash == hash || tx.smsHash == legacyHash)) {
-                                return@any true
+                            if (!tx.smsHash.isNullOrBlank()) {
+                                if (tx.smsHash == hash || tx.smsHash == legacyHash || tx.smsHash.contains(hash)) {
+                                    return@any true
+                                }
+                                val parts = tx.smsHash.split("|")
+                                if (parts.any { it == hash }) return@any true
                             }
                             if (tx.amount != amt) return@any false
                             val txJalali = JalaliDate.fromTimestamp(tx.date)
@@ -122,17 +127,29 @@ object WidgetBackgroundScanner {
                             if (!sameDay) return@any false
 
                             if (accountIdent.isNotBlank()) {
-                                val account = tx.accountId?.let { accountMap[it] }
-                                val card = account?.cardNumber ?: txItem.accountCardNumber
-                                val shaba = account?.shabaNumber
-                                val name = account?.name ?: txItem.accountName
+                                val srcAccount = tx.accountId?.let { accountMap[it] }
+                                val destAccount = tx.toAccountId?.let { accountMap[it] }
 
-                                val matchesCard = card != null && (card.contains(accountIdent) || accountIdent.contains(card.takeLast(4)))
-                                val matchesShaba = shaba != null && shaba.contains(accountIdent)
-                                val matchesName = name != null && (name.contains(accountIdent) || accountIdent.contains(name))
-                                val matchesBank = bankName.isNotBlank() && name != null && (name.contains(bankName) || bankName.contains(name))
+                                val matchesAccount = { accCard: String?, accShaba: String?, accName: String? ->
+                                    val matchesCard = accCard != null && (accCard.contains(accountIdent) || accountIdent.contains(accCard.takeLast(4)))
+                                    val matchesShaba = accShaba != null && accShaba.contains(accountIdent)
+                                    val matchesName = accName != null && (accName.contains(accountIdent) || accountIdent.contains(accName))
+                                    val matchesBank = bankName.isNotBlank() && accName != null && (accName.contains(bankName) || bankName.contains(accName))
+                                    matchesCard || matchesShaba || matchesName || matchesBank
+                                }
 
-                                matchesCard || matchesShaba || matchesName || matchesBank
+                                val matchesSrc = matchesAccount(
+                                    srcAccount?.cardNumber ?: txItem.accountCardNumber,
+                                    srcAccount?.shabaNumber,
+                                    srcAccount?.name ?: txItem.accountName
+                                )
+                                val matchesDest = (tx.type == TransactionType.TRANSFER && destAccount != null && matchesAccount(
+                                    destAccount.cardNumber,
+                                    destAccount.shabaNumber,
+                                    destAccount.name
+                                ))
+
+                                matchesSrc || matchesDest
                             } else true
                         }
 
@@ -151,6 +168,19 @@ object WidgetBackgroundScanner {
                         }
                     }
                 }
+            }
+
+            // Run TransferDetector to filter out any SMS that are part of an already registered transfer
+            val detectedTransfers = try {
+                com.example.util.TransferDetector.findTransfers(scannedUnregistered, allAccounts, existingTransactions)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val registeredTransferHashes = detectedTransfers.filter { it.isRegistered }
+                .flatMap { listOf(it.withdrawalItem.smsHash, it.depositItem.smsHash) }
+                .toSet()
+            if (registeredTransferHashes.isNotEmpty()) {
+                scannedUnregistered.removeAll { registeredTransferHashes.contains(it.smsHash) }
             }
 
             // Save to WidgetDataStore

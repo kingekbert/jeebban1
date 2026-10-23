@@ -90,6 +90,7 @@ fun PreConfirmScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val pendingItem by sharedScanViewModel.pendingScanItem.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -118,6 +119,12 @@ fun PreConfirmScreen(
             }
             if (hashToMark.isNotBlank()) {
                 sharedScanViewModel.markSmsSaved(hashToMark)
+                try {
+                    com.example.widget.WidgetDataStore.removeItem(context, hashToMark)
+                    com.example.widget.WidgetStatusHelper.updateAllWidgets(context)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
             sharedScanViewModel.clearPendingScanItem()
             onNavigateBack()

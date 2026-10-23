@@ -200,6 +200,10 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
 
                 if (isSuccess) {
                     val remaining = WidgetDataStore.removeItem(this@WidgetCategoryPickerActivity, smsHash)
+                    val curIdx = WidgetStatusHelper.getCurrentTransactionIndex(this@WidgetCategoryPickerActivity)
+                    if (curIdx >= remaining.size) {
+                        WidgetStatusHelper.setCurrentTransactionIndex(this@WidgetCategoryPickerActivity, maxOf(0, remaining.size - 1))
+                    }
                     WidgetStatusHelper.saveScanResult(this@WidgetCategoryPickerActivity, remaining.size)
                     WidgetStatusHelper.updateAllWidgets(this@WidgetCategoryPickerActivity)
 

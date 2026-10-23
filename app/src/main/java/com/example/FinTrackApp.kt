@@ -25,6 +25,8 @@ class FinTrackApp : Application() {
                         accountDao = appModule.database.accountDao(),
                         categoryDao = appModule.database.categoryDao()
                     )
+                } else {
+                    SeedData.ensureDebtCategories(appModule.database.categoryDao())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()

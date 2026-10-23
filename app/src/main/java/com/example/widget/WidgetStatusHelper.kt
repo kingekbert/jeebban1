@@ -27,6 +27,43 @@ object WidgetStatusHelper {
     private const val KEY_LAST_SCAN_TIME = "last_scan_time"
     private const val KEY_LAST_NEW_COUNT = "last_new_count"
     private const val KEY_CATEGORY_PAGE = "widget_category_page"
+    private const val KEY_CURRENT_TX_INDEX = "widget_current_tx_index"
+
+    fun getCurrentTransactionIndex(context: Context): Int {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.getInt(KEY_CURRENT_TX_INDEX, 0)
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    fun setCurrentTransactionIndex(context: Context, index: Int) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putInt(KEY_CURRENT_TX_INDEX, maxOf(0, index)).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun nextTransaction(context: Context) {
+        val items = WidgetDataStore.getItems(context)
+        if (items.isEmpty()) return
+        val current = getCurrentTransactionIndex(context)
+        val next = (current + 1) % items.size
+        setCurrentTransactionIndex(context, next)
+        updateAllWidgets(context)
+    }
+
+    fun prevTransaction(context: Context) {
+        val items = WidgetDataStore.getItems(context)
+        if (items.isEmpty()) return
+        val current = getCurrentTransactionIndex(context)
+        val prev = if (current - 1 < 0) items.size - 1 else current - 1
+        setCurrentTransactionIndex(context, prev)
+        updateAllWidgets(context)
+    }
 
     fun getCategoryPage(context: Context): Int {
         return try {
@@ -238,7 +275,10 @@ object WidgetStatusHelper {
         val moreBtnTextColor = if (isDark) 0xFFE0E0E0.toInt() else 0xFF424843.toInt()
         val itemBgRes = if (isDark) R.drawable.widget_item_bg_dark else R.drawable.widget_item_bg_light
 
-        val currentItem = items.firstOrNull()
+        val currentIndex = if (items.isNotEmpty()) {
+            getCurrentTransactionIndex(context).coerceIn(0, items.size - 1)
+        } else 0
+        val currentItem = items.getOrNull(currentIndex)
 
         for (appWidgetId in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_sms_scan)
@@ -305,13 +345,49 @@ object WidgetStatusHelper {
                 views.setTextViewText(R.id.tv_widget_tx_datetime, dateTimeStr)
                 views.setTextColor(R.id.tv_widget_tx_datetime, statusColor)
 
-                // Counter Badge (نمایش ۱ از X در صورت وجود بیش از ۱ پیامک)
+                // Counter Badge & Navigation
                 if (items.size > 1) {
+                    views.setViewVisibility(R.id.widget_nav_container, View.VISIBLE)
+                    views.setViewVisibility(R.id.btn_widget_prev_tx, View.VISIBLE)
+                    views.setViewVisibility(R.id.btn_widget_next_tx, View.VISIBLE)
                     views.setViewVisibility(R.id.tv_widget_tx_counter, View.VISIBLE)
-                    views.setTextViewText(R.id.tv_widget_tx_counter, "۱ از ${items.size.toPersianDigits()}")
+                    views.setTextViewText(R.id.tv_widget_tx_counter, "${(currentIndex + 1).toPersianDigits()} از ${items.size.toPersianDigits()}")
                     views.setTextColor(R.id.tv_widget_tx_counter, titleColor)
+                    views.setTextColor(R.id.btn_widget_prev_tx, titleColor)
+                    views.setTextColor(R.id.btn_widget_next_tx, titleColor)
+
+                    val prevIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                        action = SmsScanWidgetProvider.ACTION_PREV_TX
+                    }
+                    val prevPendingIntent = PendingIntent.getBroadcast(
+                        context,
+                        (appWidgetId * 10000) + 300,
+                        prevIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    views.setOnClickPendingIntent(R.id.btn_widget_prev_tx, prevPendingIntent)
+
+                    val nextIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                        action = SmsScanWidgetProvider.ACTION_NEXT_TX
+                    }
+                    val nextPendingIntent = PendingIntent.getBroadcast(
+                        context,
+                        (appWidgetId * 10000) + 301,
+                        nextIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    views.setOnClickPendingIntent(R.id.btn_widget_next_tx, nextPendingIntent)
                 } else {
-                    views.setViewVisibility(R.id.tv_widget_tx_counter, View.GONE)
+                    views.setViewVisibility(R.id.btn_widget_prev_tx, View.GONE)
+                    views.setViewVisibility(R.id.btn_widget_next_tx, View.GONE)
+                    if (items.size == 1) {
+                        views.setViewVisibility(R.id.widget_nav_container, View.VISIBLE)
+                        views.setViewVisibility(R.id.tv_widget_tx_counter, View.VISIBLE)
+                        views.setTextViewText(R.id.tv_widget_tx_counter, "۱ از ۱")
+                        views.setTextColor(R.id.tv_widget_tx_counter, titleColor)
+                    } else {
+                        views.setViewVisibility(R.id.widget_nav_container, View.GONE)
+                    }
                 }
 
                 // Note / Raw Description
@@ -362,7 +438,7 @@ object WidgetStatusHelper {
                         }
                         val regPi = PendingIntent.getBroadcast(
                             context,
-                            (appWidgetId * 100) + i,
+                            (appWidgetId * 10000) + (currentIndex * 10) + i,
                             regIntent,
                             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                         )
@@ -384,7 +460,7 @@ object WidgetStatusHelper {
                     }
                     val switchPagePi = PendingIntent.getBroadcast(
                         context,
-                        (appWidgetId * 100) + 98,
+                        (appWidgetId * 10000) + 98,
                         switchPageIntent,
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                     )
@@ -411,7 +487,7 @@ object WidgetStatusHelper {
                 }
                 val pickerPi = PendingIntent.getActivity(
                     context,
-                    (appWidgetId * 100) + 99,
+                    (appWidgetId * 10000) + (currentIndex * 10) + 9,
                     pickerIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
