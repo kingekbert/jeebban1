@@ -1,17 +1,23 @@
 package com.example.ui.screens.accounts
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.entity.AccountEntity
 import com.example.data.local.entity.AccountType
 import com.example.data.repository.AccountRepository
+import com.example.data.repository.AccountSmsSenderRepository
 import com.example.util.BankLogos
+import com.example.util.SmsConversationInfo
+import com.example.util.SmsConversationReader
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class AddAccountUiState(
     val accountId: Long? = null,
@@ -29,12 +35,18 @@ data class AddAccountUiState(
     val isEditing: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val isSuccess: Boolean = false
+    val isSuccess: Boolean = false,
+    val smsSenders: List<String> = emptyList(),
+    val showConversationDialog: Boolean = false,
+    val showManualSenderDialog: Boolean = false,
+    val conversationList: List<SmsConversationInfo> = emptyList(),
+    val isLoadingConversations: Boolean = false
 )
 
 class AddAccountViewModel(
     private val editAccountId: Long?,
-    private val accountRepository: AccountRepository
+    private val accountRepository: AccountRepository,
+    private val accountSmsSenderRepository: AccountSmsSenderRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddAccountUiState(accountId = editAccountId))
@@ -49,6 +61,7 @@ class AddAccountViewModel(
     private fun loadAccount(id: Long) {
         viewModelScope.launch {
             val account = accountRepository.getAccountById(id).firstOrNull()
+            val existingSenders = accountSmsSenderRepository.getSendersForAccountList(id)
             account?.let { acc ->
                 val hasAnyLogo = acc.logoResName != null || acc.logoImage != null
                 _uiState.value = _uiState.value.copy(
@@ -64,7 +77,8 @@ class AddAccountViewModel(
                     logoResName = acc.logoResName,
                     logoImage = acc.logoImage,
                     isNoLogo = !hasAnyLogo && acc.logoResName == null,
-                    isEditing = true
+                    isEditing = true,
+                    smsSenders = existingSenders.map { it.address }
                 )
             }
         }
@@ -144,6 +158,44 @@ class AddAccountViewModel(
         _uiState.value = _uiState.value.copy(cardExpiry = cardExpiry)
     }
 
+    fun addSender(address: String) {
+        val normalized = AccountSmsSenderRepository.normalizeSenderAddress(address)
+        if (normalized.isBlank()) return
+        val current = _uiState.value.smsSenders
+        if (!current.any { it.equals(normalized, ignoreCase = true) }) {
+            _uiState.value = _uiState.value.copy(smsSenders = current + normalized)
+        }
+    }
+
+    fun removeSender(address: String) {
+        val current = _uiState.value.smsSenders
+        _uiState.value = _uiState.value.copy(smsSenders = current.filterNot { it.equals(address, ignoreCase = true) })
+    }
+
+    fun setShowConversationDialog(show: Boolean, context: Context? = null) {
+        _uiState.value = _uiState.value.copy(showConversationDialog = show)
+        if (show && context != null) {
+            loadConversations(context)
+        }
+    }
+
+    fun setShowManualSenderDialog(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showManualSenderDialog = show)
+    }
+
+    fun loadConversations(context: Context) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingConversations = true)
+            val list = withContext(Dispatchers.IO) {
+                SmsConversationReader.getConversations(context)
+            }
+            _uiState.value = _uiState.value.copy(
+                conversationList = list,
+                isLoadingConversations = false
+            )
+        }
+    }
+
     fun saveAccount() {
         val state = _uiState.value
         if (state.name.isBlank()) {
@@ -181,10 +233,16 @@ class AddAccountViewModel(
                 updatedAt = now
             )
 
-            if (state.isEditing && state.accountId != null) {
+            val savedAccountId = if (state.isEditing && state.accountId != null) {
                 accountRepository.updateAccount(account)
+                state.accountId
             } else {
                 accountRepository.insertAccount(account)
+            }
+
+            // Persist SMS Senders binding for this account
+            if (savedAccountId > 0) {
+                accountSmsSenderRepository.setSendersForAccount(savedAccountId, state.smsSenders)
             }
 
             _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
@@ -193,11 +251,12 @@ class AddAccountViewModel(
 
     class Factory(
         private val editAccountId: Long?,
-        private val accountRepository: AccountRepository
+        private val accountRepository: AccountRepository,
+        private val accountSmsSenderRepository: AccountSmsSenderRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return AddAccountViewModel(editAccountId, accountRepository) as T
+            return AddAccountViewModel(editAccountId, accountRepository, accountSmsSenderRepository) as T
         }
     }
 }

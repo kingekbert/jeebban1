@@ -64,6 +64,11 @@ object WidgetBackgroundScanner {
 
             val existingTransactions = appModule.transactionRepository.getAllTransactionsWithDetailsList()
             val allAccounts = appModule.accountRepository.getAllAccountsList()
+            val allSenders = try {
+                appModule.accountSmsSenderRepository.getAllSendersList()
+            } catch (e: Exception) {
+                emptyList()
+            }
             val accountMap = allAccounts.associateBy { it.id }
 
             val patterns = try {
@@ -76,8 +81,10 @@ object WidgetBackgroundScanner {
             val projection = arrayOf("_id", "address", "body", "date")
             val days = 7
             val startTime = System.currentTimeMillis() - (days.toLong() * 24 * 60 * 60 * 1000)
-            val selection = "date >= ?"
-            val selectionArgs = arrayOf(startTime.toString())
+
+            val (selection, selectionArgs) = com.example.util.SmsAccountMatcher.buildSmsQuerySelection(
+                startTime, allAccounts, allSenders
+            )
 
             val scannedUnregistered = mutableListOf<ScannedSmsItem>()
 
@@ -98,7 +105,13 @@ object WidgetBackgroundScanner {
                     if (body.isNullOrBlank()) continue
                     if (isOtpSms(body)) continue
 
-                    val parsed = SmsParser.parse(body, patterns)
+                    val (parsed, senderAccount) = com.example.util.SmsAccountMatcher.parseSmsWithSenderPriority(
+                        body = body,
+                        smsSender = sender,
+                        allAccounts = allAccounts,
+                        allSenders = allSenders,
+                        patterns = patterns
+                    )
                     val amt = parsed.amount
                     val smsDate = parsed.date ?: date
                     val txType = parsed.transactionType
@@ -106,8 +119,16 @@ object WidgetBackgroundScanner {
                     if (amt != null && amt > 0L && txType != null) {
                         val accountIdent = parsed.accountIdentifier?.trim() ?: ""
                         val bankName = parsed.bankName?.trim() ?: ""
+
+                        val effectiveAccountIdent = if (accountIdent.isNotBlank()) accountIdent else (senderAccount?.cardNumber?.takeLast(4) ?: "")
+                        val effectiveBankName = if (bankName.isNotBlank()) bankName else (senderAccount?.name ?: "")
+                        val effectiveParsed = parsed.copy(
+                            bankName = if (parsed.bankName.isNullOrBlank()) senderAccount?.name else parsed.bankName,
+                            accountIdentifier = if (parsed.accountIdentifier.isNullOrBlank()) (senderAccount?.cardNumber?.takeLast(4) ?: "") else parsed.accountIdentifier
+                        )
+
                         val hash = SmsHashUtil.calculateHash(sender, amt, smsDate, body)
-                        val legacyHash = "${amt}_${smsDate}_${accountIdent}"
+                        val legacyHash = "${amt}_${smsDate}_${effectiveAccountIdent}"
                         val smsJalali = JalaliDate.fromTimestamp(smsDate)
 
                         val isRegistered = existingTransactions.any { txItem ->
@@ -126,15 +147,19 @@ object WidgetBackgroundScanner {
                                     txJalali.day == smsJalali.day
                             if (!sameDay) return@any false
 
-                            if (accountIdent.isNotBlank()) {
+                            if (senderAccount != null && (tx.accountId == senderAccount.id || tx.toAccountId == senderAccount.id)) {
+                                return@any true
+                            }
+
+                            if (effectiveAccountIdent.isNotBlank()) {
                                 val srcAccount = tx.accountId?.let { accountMap[it] }
                                 val destAccount = tx.toAccountId?.let { accountMap[it] }
 
                                 val matchesAccount = { accCard: String?, accShaba: String?, accName: String? ->
-                                    val matchesCard = accCard != null && (accCard.contains(accountIdent) || accountIdent.contains(accCard.takeLast(4)))
-                                    val matchesShaba = accShaba != null && accShaba.contains(accountIdent)
-                                    val matchesName = accName != null && (accName.contains(accountIdent) || accountIdent.contains(accName))
-                                    val matchesBank = bankName.isNotBlank() && accName != null && (accName.contains(bankName) || bankName.contains(accName))
+                                    val matchesCard = accCard != null && (accCard.contains(effectiveAccountIdent) || effectiveAccountIdent.contains(accCard.takeLast(4)))
+                                    val matchesShaba = accShaba != null && accShaba.contains(effectiveAccountIdent)
+                                    val matchesName = accName != null && (accName.contains(effectiveAccountIdent) || effectiveAccountIdent.contains(accName))
+                                    val matchesBank = effectiveBankName.isNotBlank() && accName != null && (accName.contains(effectiveBankName) || effectiveBankName.contains(accName))
                                     matchesCard || matchesShaba || matchesName || matchesBank
                                 }
 
@@ -157,12 +182,13 @@ object WidgetBackgroundScanner {
                             scannedUnregistered.add(
                                 ScannedSmsItem(
                                     id = hash,
-                                    parsedSms = parsed,
+                                    parsedSms = effectiveParsed,
                                     rawText = body,
                                     smsHash = hash,
                                     date = smsDate,
                                     isRecognized = true,
-                                    isRegistered = false
+                                    isRegistered = false,
+                                    sender = sender
                                 )
                             )
                         }

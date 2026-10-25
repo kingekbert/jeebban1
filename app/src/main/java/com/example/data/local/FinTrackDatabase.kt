@@ -29,9 +29,10 @@ import kotlinx.coroutines.launch
         com.example.data.local.entity.SavingsGoalEntity::class,
         com.example.data.local.entity.SavingsGoalEntryEntity::class,
         com.example.data.local.entity.GroupExpenseEntity::class,
-        com.example.data.local.entity.GroupExpenseShareEntity::class
+        com.example.data.local.entity.GroupExpenseShareEntity::class,
+        com.example.data.local.entity.AccountSmsSenderEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class FinTrackDatabase : RoomDatabase() {
@@ -45,6 +46,7 @@ abstract class FinTrackDatabase : RoomDatabase() {
     abstract fun recurringDao(): com.example.data.local.dao.RecurringDao
     abstract fun savingsGoalDao(): com.example.data.local.dao.SavingsGoalDao
     abstract fun groupExpenseDao(): com.example.data.local.dao.GroupExpenseDao
+    abstract fun accountSmsSenderDao(): com.example.data.local.dao.AccountSmsSenderDao
 
     companion object {
         @Volatile
@@ -216,6 +218,21 @@ abstract class FinTrackDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_9_10 = object : androidx.room.migration.Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `account_sms_senders` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `accountId` INTEGER NOT NULL,
+                        `address` TEXT NOT NULL,
+                        FOREIGN KEY(`accountId`) REFERENCES `accounts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_account_sms_senders_accountId` ON `account_sms_senders` (`accountId`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_account_sms_senders_accountId_address` ON `account_sms_senders` (`accountId`, `address`)")
+            }
+        }
+
         fun getInstance(context: Context): FinTrackDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -223,7 +240,7 @@ abstract class FinTrackDatabase : RoomDatabase() {
                     FinTrackDatabase::class.java,
                     Constants.DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .build()
                 INSTANCE = instance
                 instance

@@ -123,19 +123,33 @@ fun NavGraph(
 
     LaunchedEffect(initialSharedSmsText) {
         if (!initialSharedSmsText.isNullOrBlank()) {
+            val allAccounts = try { app.appModule.accountRepository.getAllAccountsList() } catch (e: Exception) { emptyList() }
+            val allSenders = try { app.appModule.accountSmsSenderRepository.getAllSendersList() } catch (e: Exception) { emptyList() }
             val patterns = try { app.appModule.smsPatternRepository.getActivePatternsList() } catch (e: Exception) { emptyList() }
-            val parsed = com.example.util.SmsParser.parse(initialSharedSmsText, patterns)
+            val sharedSender = com.example.ui.screens.import_sms.SharedSmsHolder.sharedSender ?: ""
+            val (parsed, senderAccount) = com.example.util.SmsAccountMatcher.parseSmsWithSenderPriority(
+                body = initialSharedSmsText,
+                smsSender = sharedSender,
+                allAccounts = allAccounts,
+                allSenders = allSenders,
+                patterns = patterns
+            )
             if (parsed.amount != null && parsed.amount > 0 && parsed.transactionType != null) {
+                val effectiveParsed = parsed.copy(
+                    bankName = if (parsed.bankName.isNullOrBlank()) senderAccount?.name else parsed.bankName,
+                    accountIdentifier = if (parsed.accountIdentifier.isNullOrBlank()) (senderAccount?.cardNumber?.takeLast(4) ?: "") else parsed.accountIdentifier
+                )
                 val smsDate = parsed.date ?: System.currentTimeMillis()
-                val hash = com.example.util.SmsHashUtil.calculateHash("", parsed.amount, smsDate, initialSharedSmsText)
+                val hash = com.example.util.SmsHashUtil.calculateHash(sharedSender, parsed.amount, smsDate, initialSharedSmsText)
                 val item = com.example.ui.screens.scan_sms.ScannedSmsItem(
                     id = hash,
-                    parsedSms = parsed,
+                    parsedSms = effectiveParsed,
                     rawText = initialSharedSmsText,
                     smsHash = hash,
                     date = smsDate,
                     isRecognized = true,
-                    isRegistered = false
+                    isRegistered = false,
+                    sender = sharedSender
                 )
                 sharedScanViewModel.setPendingScanItem(item)
                 com.example.ui.screens.scan_sms.ScanSmsDataHolder.selectedItem = item
@@ -375,7 +389,8 @@ fun NavGraph(
                         accountRepository = app.appModule.accountRepository,
                         categoryRepository = app.appModule.categoryRepository,
                         smsPatternRepository = app.appModule.smsPatternRepository,
-                        addTransactionUseCase = app.appModule.addTransactionUseCase
+                        addTransactionUseCase = app.appModule.addTransactionUseCase,
+                        accountSmsSenderRepository = app.appModule.accountSmsSenderRepository
                     )
                 )
                 ImportSmsScreen(
@@ -390,7 +405,8 @@ fun NavGraph(
                     factory = ScanSmsViewModel.Factory(
                         transactionRepository = app.appModule.transactionRepository,
                         accountRepository = app.appModule.accountRepository,
-                        smsPatternRepository = app.appModule.smsPatternRepository
+                        smsPatternRepository = app.appModule.smsPatternRepository,
+                        accountSmsSenderRepository = app.appModule.accountSmsSenderRepository
                     )
                 )
                 ScanSmsScreen(
@@ -411,7 +427,8 @@ fun NavGraph(
                     factory = ScanSmsViewModel.Factory(
                         transactionRepository = app.appModule.transactionRepository,
                         accountRepository = app.appModule.accountRepository,
-                        smsPatternRepository = app.appModule.smsPatternRepository
+                        smsPatternRepository = app.appModule.smsPatternRepository,
+                        accountSmsSenderRepository = app.appModule.accountSmsSenderRepository
                     )
                 )
                 com.example.ui.screens.scan_sms.WidgetScanScreen(
@@ -433,7 +450,8 @@ fun NavGraph(
                         accountRepository = app.appModule.accountRepository,
                         categoryRepository = app.appModule.categoryRepository,
                         addTransactionUseCase = app.appModule.addTransactionUseCase,
-                        groupExpenseRepository = app.appModule.groupExpenseRepository
+                        groupExpenseRepository = app.appModule.groupExpenseRepository,
+                        accountSmsSenderRepository = app.appModule.accountSmsSenderRepository
                     )
                 )
 
@@ -661,7 +679,11 @@ fun NavGraph(
                 val argId = backStackEntry.arguments?.getLong("accountId") ?: -1L
                 val accountId = if (argId > 0) argId else null
                 val viewModel: AddAccountViewModel = viewModel(
-                    factory = AddAccountViewModel.Factory(accountId, app.appModule.accountRepository)
+                    factory = AddAccountViewModel.Factory(
+                        accountId,
+                        app.appModule.accountRepository,
+                        app.appModule.accountSmsSenderRepository
+                    )
                 )
                 AddAccountScreen(
                     viewModel = viewModel,

@@ -42,7 +42,8 @@ class ImportSmsViewModel(
     private val accountRepository: AccountRepository,
     private val categoryRepository: CategoryRepository,
     private val smsPatternRepository: SmsPatternRepository,
-    private val addTransactionUseCase: AddTransactionUseCase
+    private val addTransactionUseCase: AddTransactionUseCase,
+    private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ImportSmsUiState())
@@ -126,12 +127,32 @@ class ImportSmsViewModel(
             val rawNote = result.rawDescription ?: ""
 
             val allAccs = accountRepository.allAccounts.first()
+            val allSenders = try {
+                accountSmsSenderRepository?.getAllSendersList() ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
             var matchedAccount: AccountEntity? = null
+
+            // 1. Check if sender is known from SharedSmsHolder or if text contains a registered sender address
+            val sharedSender = SharedSmsHolder.sharedSender
+            if (!sharedSender.isNullOrBlank() && allSenders.isNotEmpty()) {
+                matchedAccount = com.example.util.SmsAccountMatcher.findAccountForSender(sharedSender, allAccs, allSenders)
+            }
+
+            if (matchedAccount == null && allSenders.isNotEmpty()) {
+                val foundSender = allSenders.firstOrNull { senderEntity ->
+                    text.contains(senderEntity.address, ignoreCase = true)
+                }
+                if (foundSender != null) {
+                    matchedAccount = allAccs.find { it.id == foundSender.accountId }
+                }
+            }
 
             val accIdentifier = result.accountIdentifier
             val bankName = result.bankName
 
-            if (!accIdentifier.isNullOrBlank()) {
+            if (matchedAccount == null && !accIdentifier.isNullOrBlank()) {
                 matchedAccount = allAccs.find { acc ->
                     (acc.cardNumber != null && acc.cardNumber.contains(accIdentifier)) ||
                     (acc.shabaNumber != null && acc.shabaNumber.contains(accIdentifier)) ||
@@ -269,11 +290,12 @@ class ImportSmsViewModel(
         private val accountRepository: AccountRepository,
         private val categoryRepository: CategoryRepository,
         private val smsPatternRepository: SmsPatternRepository,
-        private val addTransactionUseCase: AddTransactionUseCase
+        private val addTransactionUseCase: AddTransactionUseCase,
+        private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ImportSmsViewModel(accountRepository, categoryRepository, smsPatternRepository, addTransactionUseCase) as T
+            return ImportSmsViewModel(accountRepository, categoryRepository, smsPatternRepository, addTransactionUseCase, accountSmsSenderRepository) as T
         }
     }
 }

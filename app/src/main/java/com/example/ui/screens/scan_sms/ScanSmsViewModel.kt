@@ -26,7 +26,8 @@ data class ScannedSmsItem(
     val smsHash: String,
     val date: Long,
     val isRecognized: Boolean = true,
-    val isRegistered: Boolean = false
+    val isRegistered: Boolean = false,
+    val sender: String = ""
 )
 
 data class ScanSmsUiState(
@@ -42,7 +43,8 @@ data class ScanSmsUiState(
 class ScanSmsViewModel(
     private val transactionRepository: TransactionRepository,
     private val accountRepository: AccountRepository,
-    private val smsPatternRepository: SmsPatternRepository
+    private val smsPatternRepository: SmsPatternRepository,
+    private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanSmsUiState())
@@ -69,6 +71,11 @@ class ScanSmsViewModel(
                 val items = withContext(Dispatchers.IO) {
                     val existingTransactions = transactionRepository.getAllTransactionsWithDetailsList()
                     val allAccounts = accountRepository.getAllAccountsList()
+                    val allSenders = try {
+                        accountSmsSenderRepository?.getAllSendersList() ?: emptyList()
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
                     val accountMap = allAccounts.associateBy { it.id }
 
                     val patterns = try {
@@ -82,8 +89,10 @@ class ScanSmsViewModel(
                     val uri = Uri.parse("content://sms/inbox")
                     val projection = arrayOf("_id", "address", "body", "date")
                     val startTime = System.currentTimeMillis() - (days.toLong() * 24 * 60 * 60 * 1000)
-                    val selection = "date >= ?"
-                    val selectionArgs = arrayOf(startTime.toString())
+
+                    val (selection, selectionArgs) = com.example.util.SmsAccountMatcher.buildSmsQuerySelection(
+                        startTime, allAccounts, allSenders
+                    )
 
                     val cursor = context.contentResolver.query(
                         uri, projection, selection, selectionArgs, "date DESC"
@@ -104,8 +113,14 @@ class ScanSmsViewModel(
                             // 1. Filter out OTP / Second Passwords / Verification codes
                             if (isOtpSms(body)) continue
 
-                            // 2. Parse SMS with custom learned patterns
-                            val parsed = SmsParser.parse(body, patterns)
+                            // 2. Parse SMS with sender priority (Account's patterns first, fallback to all patterns)
+                            val (parsed, senderAccount) = com.example.util.SmsAccountMatcher.parseSmsWithSenderPriority(
+                                body = body,
+                                smsSender = sender,
+                                allAccounts = allAccounts,
+                                allSenders = allSenders,
+                                patterns = patterns
+                            )
 
                             // Strict check: only include SMS where amount, date, and transactionType are all non-null and amount > 0
                             val amt = parsed.amount
@@ -117,16 +132,24 @@ class ScanSmsViewModel(
                                 val accountIdent = parsed.accountIdentifier?.trim() ?: ""
                                 val bankName = parsed.bankName?.trim() ?: ""
 
+                                val effectiveAccountIdent = if (accountIdent.isNotBlank()) accountIdent else (senderAccount?.cardNumber?.takeLast(4) ?: "")
+                                val effectiveBankName = if (bankName.isNotBlank()) bankName else (senderAccount?.name ?: "")
+                                val effectiveParsed = parsed.copy(
+                                    bankName = if (parsed.bankName.isNullOrBlank()) senderAccount?.name else parsed.bankName,
+                                    accountIdentifier = if (parsed.accountIdentifier.isNullOrBlank()) (senderAccount?.cardNumber?.takeLast(4) ?: "") else parsed.accountIdentifier
+                                )
+
                                 // Calculate SHA-256 hash (sender + amount + smsDate + normalized text)
                                 val hash = com.example.util.SmsHashUtil.calculateHash(sender, amt, smsDate, body)
-                                val legacyHash = "${amt}_${smsDate}_${accountIdent}"
+                                val legacyHash = "${amt}_${smsDate}_${effectiveAccountIdent}"
 
                                 val smsJalali = JalaliDate.fromTimestamp(smsDate)
 
                                 // Accurate check for registered transaction based on:
-                                // 1. Amount: exactly equal (Long)
-                                // 2. Date: same day (year + month + day Jalali), ignoring hour/minute
-                                // 3. Account: accountIdentifier matches registered account's card/account number
+                                // 1. Exact hash
+                                // 2. Amount match
+                                // 3. Same day Jalali
+                                // 4. Account matching (Sender account prioritized)
                                 val isRegistered = existingTransactions.any { txItem ->
                                     val tx = txItem.transaction
 
@@ -145,17 +168,21 @@ class ScanSmsViewModel(
                                             txJalali.day == smsJalali.day
                                     if (!sameDay) return@any false
 
-                                    // 3. Account matching
-                                    if (accountIdent.isNotBlank()) {
+                                    // 3. Account matching: If sender matches a registered account, check that account directly
+                                    if (senderAccount != null && tx.accountId == senderAccount.id) {
+                                        return@any true
+                                    }
+
+                                    if (effectiveAccountIdent.isNotBlank()) {
                                         val account = tx.accountId?.let { accountMap[it] }
                                         val card = account?.cardNumber ?: txItem.accountCardNumber
                                         val shaba = account?.shabaNumber
                                         val name = account?.name ?: txItem.accountName
 
-                                        val matchesCard = card != null && (card.contains(accountIdent) || accountIdent.contains(card.takeLast(4)))
-                                        val matchesShaba = shaba != null && shaba.contains(accountIdent)
-                                        val matchesName = name != null && (name.contains(accountIdent) || accountIdent.contains(name))
-                                        val matchesBank = bankName.isNotBlank() && name != null && (name.contains(bankName) || bankName.contains(name))
+                                        val matchesCard = card != null && (card.contains(effectiveAccountIdent) || effectiveAccountIdent.contains(card.takeLast(4)))
+                                        val matchesShaba = shaba != null && shaba.contains(effectiveAccountIdent)
+                                        val matchesName = name != null && (name.contains(effectiveAccountIdent) || effectiveAccountIdent.contains(name))
+                                        val matchesBank = effectiveBankName.isNotBlank() && name != null && (name.contains(effectiveBankName) || effectiveBankName.contains(name))
 
                                         matchesCard || matchesShaba || matchesName || matchesBank
                                     } else {
@@ -169,12 +196,13 @@ class ScanSmsViewModel(
                                 scannedResult.add(
                                     ScannedSmsItem(
                                         id = hash,
-                                        parsedSms = parsed,
+                                        parsedSms = effectiveParsed,
                                         rawText = body,
                                         smsHash = hash,
                                         date = smsDate,
                                         isRecognized = true,
-                                        isRegistered = isRegistered
+                                        isRegistered = isRegistered,
+                                        sender = sender
                                     )
                                 )
                             }
@@ -339,11 +367,12 @@ class ScanSmsViewModel(
     class Factory(
         private val transactionRepository: TransactionRepository,
         private val accountRepository: AccountRepository,
-        private val smsPatternRepository: SmsPatternRepository
+        private val smsPatternRepository: SmsPatternRepository,
+        private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ScanSmsViewModel(transactionRepository, accountRepository, smsPatternRepository) as T
+            return ScanSmsViewModel(transactionRepository, accountRepository, smsPatternRepository, accountSmsSenderRepository) as T
         }
     }
 }

@@ -64,7 +64,8 @@ class PreConfirmViewModel(
     private val accountRepository: AccountRepository,
     private val categoryRepository: CategoryRepository,
     private val addTransactionUseCase: AddTransactionUseCase,
-    private val groupExpenseRepository: GroupExpenseRepository
+    private val groupExpenseRepository: GroupExpenseRepository,
+    private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PreConfirmUiState())
@@ -127,9 +128,14 @@ class PreConfirmViewModel(
         viewModelScope.launch {
             try {
                 val allAccs = try { accountRepository.allAccounts.first() } catch (e: Exception) { emptyList() }
+                val allSenders = try { accountSmsSenderRepository?.getAllSendersList() ?: emptyList() } catch (e: Exception) { emptyList() }
                 var matchedAccount: AccountEntity? = null
 
-                if (!finalAccountIdent.isNullOrBlank()) {
+                if (targetItem.sender.isNotBlank() && allSenders.isNotEmpty()) {
+                    matchedAccount = com.example.util.SmsAccountMatcher.findAccountForSender(targetItem.sender, allAccs, allSenders)
+                }
+
+                if (matchedAccount == null && !finalAccountIdent.isNullOrBlank()) {
                     matchedAccount = allAccs.find { acc ->
                         (acc.cardNumber != null && acc.cardNumber.contains(finalAccountIdent)) ||
                         (acc.shabaNumber != null && acc.shabaNumber.contains(finalAccountIdent)) ||
@@ -572,7 +578,8 @@ class PreConfirmViewModel(
         private val accountRepository: AccountRepository,
         private val categoryRepository: CategoryRepository,
         private val addTransactionUseCase: AddTransactionUseCase,
-        private val groupExpenseRepository: GroupExpenseRepository
+        private val groupExpenseRepository: GroupExpenseRepository,
+        private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -580,7 +587,8 @@ class PreConfirmViewModel(
                 accountRepository = accountRepository,
                 categoryRepository = categoryRepository,
                 addTransactionUseCase = addTransactionUseCase,
-                groupExpenseRepository = groupExpenseRepository
+                groupExpenseRepository = groupExpenseRepository,
+                accountSmsSenderRepository = accountSmsSenderRepository
             ) as T
         }
     }

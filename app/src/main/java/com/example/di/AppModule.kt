@@ -48,6 +48,14 @@ class AppModule(private val context: Context) {
         com.example.data.repository.SmsPatternRepository(database.smsPatternDao())
     }
 
+    val accountSmsSenderDao: com.example.data.local.dao.AccountSmsSenderDao by lazy {
+        database.accountSmsSenderDao()
+    }
+
+    val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository by lazy {
+        com.example.data.repository.AccountSmsSenderRepository(accountSmsSenderDao)
+    }
+
     val chequeDao: com.example.data.local.dao.ChequeDao by lazy {
         database.chequeDao()
     }

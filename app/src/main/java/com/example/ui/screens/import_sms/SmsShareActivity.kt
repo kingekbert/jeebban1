@@ -8,6 +8,7 @@ import com.example.MainActivity
 
 object SharedSmsHolder {
     var sharedText: String? = null
+    var sharedSender: String? = null
 }
 
 class SmsShareActivity : ComponentActivity() {
@@ -18,6 +19,11 @@ class SmsShareActivity : ComponentActivity() {
             intent.getStringExtra(Intent.EXTRA_TEXT)
                 ?: intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
         } else null
+
+        val extraSender = intent?.getStringExtra("address")
+            ?: intent?.getStringExtra(Intent.EXTRA_SUBJECT)
+            ?: intent?.getStringExtra("sender")
+            ?: intent?.getStringExtra("phone_number")
 
         if (!rawText.isNullOrBlank()) {
             var cleaned = rawText
@@ -30,13 +36,17 @@ class SmsShareActivity : ComponentActivity() {
                 cleaned = cleaned.replace("+", " ")
             }
 
-            Log.d("ShareDebug", "raw=$rawText, cleaned=$cleaned")
+            Log.d("ShareDebug", "raw=$rawText, cleaned=$cleaned, sender=$extraSender")
 
             SharedSmsHolder.sharedText = cleaned
+            SharedSmsHolder.sharedSender = extraSender
 
             val mainIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra("shared_sms_text", cleaned)
+                if (!extraSender.isNullOrBlank()) {
+                    putExtra("shared_sms_sender", extraSender)
+                }
                 putExtra("navigate_to", "import_sms")
             }
             startActivity(mainIntent)
