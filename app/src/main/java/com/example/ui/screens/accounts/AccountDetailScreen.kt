@@ -39,14 +39,20 @@ import com.example.ui.theme.ExpenseColor
 import com.example.ui.theme.IncomeColor
 import com.example.util.AmountFormatter
 import com.example.util.BankLogoBadge
+import com.example.util.DateFormatter
 import com.example.util.toPersianDigits
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pattern
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.style.TextOverflow
 
@@ -57,6 +63,7 @@ fun AccountDetailScreen(
     onNavigateBack: () -> Unit,
     onNavigateToEditPattern: (accountId: Long, patternId: Long) -> Unit = { _, _ -> },
     onNavigateToAddPattern: (accountId: Long) -> Unit = {},
+    onNavigateToReconciliation: (accountId: Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -195,6 +202,119 @@ fun AccountDetailScreen(
                             color = ExpenseColor,
                             modifier = Modifier.weight(1f)
                         )
+                    }
+                }
+
+                // کارت تطبیق مانده (Balance Reconciliation Card)
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = state.hasSnapshots) {
+                                if (account != null) {
+                                    onNavigateToReconciliation(account.id)
+                                }
+                            },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = when {
+                                !state.hasSnapshots -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                state.isReconciliationSynced -> IncomeColor.copy(alpha = 0.12f)
+                                else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+                            }
+                        ),
+                        border = when {
+                            !state.hasSnapshots -> null
+                            state.isReconciliationSynced -> androidx.compose.foundation.BorderStroke(1.dp, IncomeColor.copy(alpha = 0.4f))
+                            else -> androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
+                        }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = when {
+                                            !state.hasSnapshots -> Icons.Default.Info
+                                            state.isReconciliationSynced -> Icons.Default.CheckCircle
+                                            else -> Icons.Default.Warning
+                                        },
+                                        contentDescription = null,
+                                        tint = when {
+                                            !state.hasSnapshots -> MaterialTheme.colorScheme.onSurfaceVariant
+                                            state.isReconciliationSynced -> IncomeColor
+                                            else -> MaterialTheme.colorScheme.error
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "تطبیق مانده با بانک",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                if (state.hasSnapshots && !state.isReconciliationSynced) {
+                                    Button(
+                                        onClick = { if (account != null) onNavigateToReconciliation(account.id) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("بررسی اختلاف", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                    }
+                                } else if (state.hasSnapshots) {
+                                    TextButton(
+                                        onClick = { if (account != null) onNavigateToReconciliation(account.id) }
+                                    ) {
+                                        Text("تاریخچه", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            when {
+                                !state.hasSnapshots -> {
+                                    Text(
+                                        text = "با ثبت تراکنش‌ها از پیامک، مانده بانک به‌طور خودکار بررسی می‌شود.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                state.isReconciliationSynced -> {
+                                    val jalaliDate = state.latestSnapshot?.let {
+                                        DateFormatter.formatDate(it.smsDate)
+                                    } ?: ""
+                                    Text(
+                                        text = "✅ مانده با بانک همخوان است — آخرین بررسی: $jalaliDate",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                else -> {
+                                    val absDiff = kotlin.math.abs(state.reconciliationDiff)
+                                    val diffStr = AmountFormatter.format(absDiff)
+                                    val bankBalStr = AmountFormatter.format(state.latestSnapshot?.balance ?: 0L)
+                                    val appBalStr = AmountFormatter.format(state.appBalanceAtSnapshot)
+                                    Text(
+                                        text = "⚠️ اختلاف $diffStr ریال با بانک (بانک: $bankBalStr / اپ: $appBalStr)",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 

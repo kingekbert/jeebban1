@@ -118,6 +118,20 @@ object WidgetQuickRegister {
             }
 
             if (isSavedSuccess) {
+                val currentItem = WidgetDataStore.getItems(context).find { it.smsHash == smsHash }
+                val extractedBalance = currentItem?.parsedSms?.balance
+                if (accountId != null && extractedBalance != null && extractedBalance > 0L) {
+                    try {
+                        appModule.reconciliationRepository.recordSnapshot(
+                            accountId = accountId,
+                            smsDate = date,
+                            balance = extractedBalance,
+                            smsHash = smsHash
+                        )
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
                 val remaining = WidgetDataStore.removeItem(context, smsHash)
                 val curIdx = WidgetStatusHelper.getCurrentTransactionIndex(context)
                 if (curIdx >= remaining.size) {

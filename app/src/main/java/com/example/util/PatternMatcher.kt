@@ -47,6 +47,7 @@ object PatternMatcher {
             var hourStr: String? = null
             var minStr: String? = null
             var description: String? = null
+            var balance: Long? = null
             var hasMatchingFailure = false
 
             // 2. Read each fieldType and map corresponding token
@@ -121,7 +122,17 @@ object PatternMatcher {
                     FieldType.DESCRIPTION -> {
                         description = if (description == null) currentToken.text else "$description ${currentToken.text}"
                     }
-                    FieldType.BALANCE -> {}
+                    FieldType.BALANCE -> {
+                        val cleanedNum = convertToEnglish(currentToken.text)
+                            .replace(",", "")
+                            .replace("،", "")
+                            .replace(".", "")
+                            .replace(Regex("""[^\d]"""), "")
+                        val parsedBal = cleanedNum.toLongOrNull()
+                        if (parsedBal != null) {
+                            balance = parsedBal
+                        }
+                    }
                     FieldType.IGNORE -> {}
                 }
             }
@@ -151,7 +162,8 @@ object PatternMatcher {
                         amount = amount,
                         date = timestamp,
                         accountIdentifier = accountIdent ?: pattern.accountIdentifier.ifBlank { null },
-                        rawDescription = description ?: (if (txType == TransactionType.INCOME) "واریز" else "برداشت")
+                        rawDescription = description ?: (if (txType == TransactionType.INCOME) "واریز" else "برداشت"),
+                        balance = balance
                     )
                 }
             }

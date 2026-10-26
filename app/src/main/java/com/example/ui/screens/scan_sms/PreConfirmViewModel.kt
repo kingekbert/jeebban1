@@ -57,7 +57,10 @@ data class PreConfirmUiState(
     // Transfer between accounts
     val selectedToAccountId: Long? = null,
     val transferFeeAmount: Long = 0L,
-    val detectedTransfer: com.example.util.DetectedTransfer? = null
+    val detectedTransfer: com.example.util.DetectedTransfer? = null,
+    // Balance Reconciliation
+    val balance: Long? = null,
+    val balanceDiff: Long? = null
 )
 
 class PreConfirmViewModel(
@@ -65,7 +68,8 @@ class PreConfirmViewModel(
     private val categoryRepository: CategoryRepository,
     private val addTransactionUseCase: AddTransactionUseCase,
     private val groupExpenseRepository: GroupExpenseRepository,
-    private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null
+    private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null,
+    private val reconciliationRepository: com.example.data.repository.ReconciliationRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PreConfirmUiState())
@@ -117,7 +121,9 @@ class PreConfirmViewModel(
                 isGroupExpenseEnabled = false,
                 groupShares = emptyList(),
                 detectedTransfer = detectedTransfer,
-                transferFeeAmount = transferFee
+                transferFeeAmount = transferFee,
+                balance = targetItem.parsedSms.balance,
+                balanceDiff = null
             )
         }
 
@@ -190,8 +196,25 @@ class PreConfirmViewModel(
                         recentPersonNames = recentNames
                     )
                 }
+
+                if (targetItem.parsedSms.balance != null && actualDefaultAccId != null) {
+                    checkBalanceDiff(actualDefaultAccId, targetItem.parsedSms.balance)
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = "خطا در بارگذاری حساب‌ها و دسته‌بندی‌ها") }
+            }
+        }
+    }
+
+    private fun checkBalanceDiff(accountId: Long, smsBalance: Long) {
+        viewModelScope.launch {
+            try {
+                val diag = reconciliationRepository?.getReconciliationDiagnosis(accountId, emptyList())
+                if (diag != null) {
+                    _uiState.update { it.copy(balanceDiff = smsBalance - diag.appBalance) }
+                }
+            } catch (e: Exception) {
+                // Ignore gracefully
             }
         }
     }
@@ -225,6 +248,10 @@ class PreConfirmViewModel(
 
     fun setSelectedAccount(accountId: Long) {
         _uiState.update { it.copy(selectedAccountId = accountId) }
+        val bal = _uiState.value.balance
+        if (bal != null) {
+            checkBalanceDiff(accountId, bal)
+        }
     }
 
     fun setSelectedToAccount(accountId: Long?) {
@@ -452,6 +479,7 @@ class PreConfirmViewModel(
                         addTransactionUseCase(feeTx)
                     }
 
+                    recordSnapshotIfPresent(accId, currentState.dateTimestamp, currentState.smsHash)
                     _uiState.update { it.copy(isSavedSuccess = true) }
                 } catch (e: Exception) {
                     _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "خطا در ذخیره‌سازی انتقال") }
@@ -508,6 +536,7 @@ class PreConfirmViewModel(
                         shareId = currentState.selectedMatchedDongId,
                         incomeTransaction = transaction
                     )
+                    recordSnapshotIfPresent(accId, currentState.dateTimestamp, currentState.smsHash)
                     _uiState.update { it.copy(isSavedSuccess = true) }
                     return@launch
                 }
@@ -523,6 +552,7 @@ class PreConfirmViewModel(
                         shareMode = currentState.groupShareMode,
                         shares = finalShares.map { it.name to it.amount }
                     )
+                    recordSnapshotIfPresent(accId, currentState.dateTimestamp, currentState.smsHash)
                     _uiState.update { it.copy(isSavedSuccess = true) }
                     return@launch
                 }
@@ -530,6 +560,7 @@ class PreConfirmViewModel(
                 // Standard transaction registration
                 val res = addTransactionUseCase(transaction)
                 if (res.isSuccess) {
+                    recordSnapshotIfPresent(accId, currentState.dateTimestamp, currentState.smsHash)
                     _uiState.update { it.copy(isSavedSuccess = true) }
                 } else {
                     _uiState.update {
@@ -540,6 +571,22 @@ class PreConfirmViewModel(
                 _uiState.update {
                     it.copy(errorMessage = e.localizedMessage ?: "خطا در ذخیره‌سازی تراکنش")
                 }
+            }
+        }
+    }
+
+    private suspend fun recordSnapshotIfPresent(accId: Long?, date: Long, hash: String) {
+        val bal = _uiState.value.balance
+        if (bal != null && bal > 0L && accId != null) {
+            try {
+                reconciliationRepository?.recordSnapshot(
+                    accountId = accId,
+                    smsDate = date,
+                    balance = bal,
+                    smsHash = hash
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
@@ -579,7 +626,8 @@ class PreConfirmViewModel(
         private val categoryRepository: CategoryRepository,
         private val addTransactionUseCase: AddTransactionUseCase,
         private val groupExpenseRepository: GroupExpenseRepository,
-        private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null
+        private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null,
+        private val reconciliationRepository: com.example.data.repository.ReconciliationRepository? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -588,7 +636,8 @@ class PreConfirmViewModel(
                 categoryRepository = categoryRepository,
                 addTransactionUseCase = addTransactionUseCase,
                 groupExpenseRepository = groupExpenseRepository,
-                accountSmsSenderRepository = accountSmsSenderRepository
+                accountSmsSenderRepository = accountSmsSenderRepository,
+                reconciliationRepository = reconciliationRepository
             ) as T
         }
     }

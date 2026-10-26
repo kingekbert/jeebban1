@@ -77,4 +77,21 @@ interface AccountDao {
 
     @Query("DELETE FROM accounts")
     suspend fun deleteAll()
+
+    @Query("""
+        SELECT 
+          (
+            a.initialBalance 
+            + COALESCE((SELECT SUM(t.amount) FROM transactions t WHERE t.accountId = a.id AND t.type = 'INCOME' AND t.date <= :date), 0)
+            - COALESCE((SELECT SUM(t.amount) FROM transactions t WHERE t.accountId = a.id AND t.type = 'EXPENSE' AND t.date <= :date), 0)
+            + COALESCE((SELECT SUM(t.amount) FROM transactions t WHERE t.toAccountId = a.id AND t.type = 'TRANSFER' AND t.date <= :date), 0)
+            - COALESCE((SELECT SUM(t.amount) FROM transactions t WHERE t.accountId = a.id AND t.type = 'TRANSFER' AND t.date <= :date), 0)
+          )
+        FROM accounts a
+        WHERE a.id = :accountId
+    """)
+    suspend fun calculateAppBalanceAtDate(accountId: Long, date: Long): Long?
+
+    @Query("UPDATE accounts SET initialBalance = :newInitialBalance WHERE id = :accountId")
+    suspend fun updateInitialBalance(accountId: Long, newInitialBalance: Long)
 }

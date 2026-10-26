@@ -89,4 +89,24 @@ object CsvExporter {
             context.startActivity(Intent.createChooser(intent, "اشتراک‌گذاری گزارش"))
         }
     }
+
+    fun generateSnapshotsCsv(
+        snapshots: List<com.example.data.local.entity.AccountBalanceSnapshotEntity>,
+        accountName: String
+    ): String {
+        val zoneId = ZoneId.systemDefault()
+        val builder = java.lang.StringBuilder()
+        builder.append('\uFEFF')
+        builder.append("ردیف,حساب,تاریخ شمسی,ساعت,مانده بانک (ریال),شناسه پیامک\n")
+        snapshots.forEachIndexed { index, s ->
+            val jalali = JalaliDate.fromTimestamp(s.smsDate, zoneId)
+            val dateStr = jalali.format(includeDayName = false)
+            val (h, m) = DateFormatter.extractHourAndMinute(s.smsDate)
+            val timeStr = String.format("%02d:%02d", h, m)
+            val escName = escapeCsv(accountName)
+            val escHash = escapeCsv(s.smsHash)
+            builder.append("${index + 1},$escName,$dateStr,$timeStr,${s.balance},$escHash\n")
+        }
+        return builder.toString()
+    }
 }

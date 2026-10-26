@@ -69,5 +69,8 @@ sealed class Screen(val route: String) {
             return "pattern_learner?$accPart$textPart$patternPart"
         }
     }
+    object Reconciliation : Screen("reconciliation/{accountId}") {
+        fun createRoute(accountId: Long) = "reconciliation/$accountId"
+    }
 }
 

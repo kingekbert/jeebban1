@@ -406,7 +406,8 @@ fun NavGraph(
                         transactionRepository = app.appModule.transactionRepository,
                         accountRepository = app.appModule.accountRepository,
                         smsPatternRepository = app.appModule.smsPatternRepository,
-                        accountSmsSenderRepository = app.appModule.accountSmsSenderRepository
+                        accountSmsSenderRepository = app.appModule.accountSmsSenderRepository,
+                        reconciliationRepository = app.appModule.reconciliationRepository
                     )
                 )
                 ScanSmsScreen(
@@ -418,6 +419,9 @@ fun NavGraph(
                     },
                     onNavigateToPatternLearnerWithText = { text ->
                         navController.navigate(Screen.PatternLearner.createRoute(null, text))
+                    },
+                    onNavigateToReconciliation = { accId ->
+                        navController.navigate(Screen.Reconciliation.createRoute(accId))
                     }
                 )
             }
@@ -451,14 +455,18 @@ fun NavGraph(
                         categoryRepository = app.appModule.categoryRepository,
                         addTransactionUseCase = app.appModule.addTransactionUseCase,
                         groupExpenseRepository = app.appModule.groupExpenseRepository,
-                        accountSmsSenderRepository = app.appModule.accountSmsSenderRepository
+                        accountSmsSenderRepository = app.appModule.accountSmsSenderRepository,
+                        reconciliationRepository = app.appModule.reconciliationRepository
                     )
                 )
 
                 PreConfirmScreen(
                     viewModel = viewModel,
                     sharedScanViewModel = sharedScanViewModel,
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToReconciliation = { accId ->
+                        navController.navigate(Screen.Reconciliation.createRoute(accId))
+                    }
                 )
             }
 
@@ -708,7 +716,8 @@ fun NavGraph(
                         accountId = accountId,
                         accountRepository = app.appModule.accountRepository,
                         transactionRepository = app.appModule.transactionRepository,
-                        smsPatternRepository = app.appModule.smsPatternRepository
+                        smsPatternRepository = app.appModule.smsPatternRepository,
+                        reconciliationRepository = app.appModule.reconciliationRepository
                     )
                 )
                 AccountDetailScreen(
@@ -719,7 +728,34 @@ fun NavGraph(
                     },
                     onNavigateToAddPattern = { accId ->
                         navController.navigate(Screen.PatternLearner.createRoute(accountId = accId))
+                    },
+                    onNavigateToReconciliation = { accId ->
+                        navController.navigate(Screen.Reconciliation.createRoute(accId))
                     }
+                )
+            }
+
+            composable(
+                route = Screen.Reconciliation.route,
+                arguments = listOf(
+                    navArgument("accountId") {
+                        type = NavType.LongType
+                    }
+                )
+            ) { backStackEntry ->
+                val accountId = backStackEntry.arguments?.getLong("accountId") ?: return@composable
+                val viewModel: com.example.ui.screens.reconciliation.ReconciliationViewModel = viewModel(
+                    factory = com.example.ui.screens.reconciliation.ReconciliationViewModel.Factory(
+                        accountId = accountId,
+                        accountRepository = app.appModule.accountRepository,
+                        reconciliationRepository = app.appModule.reconciliationRepository,
+                        categoryRepository = app.appModule.categoryRepository,
+                        appContext = app
+                    )
+                )
+                com.example.ui.screens.reconciliation.ReconciliationScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
 

@@ -88,6 +88,10 @@ class AppModule(private val context: Context) {
         AddTransactionUseCase(transactionRepository, categoryRepository, debtRepository)
     }
 
+    val reconciliationRepository: com.example.data.repository.ReconciliationRepository by lazy {
+        com.example.data.repository.ReconciliationRepository(database)
+    }
+
     val getDashboardDataUseCase: GetDashboardDataUseCase by lazy {
         GetDashboardDataUseCase(accountRepository, transactionRepository)
     }

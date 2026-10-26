@@ -32,7 +32,8 @@ data class BackupData(
     val savings_goals: List<SavingsGoalEntity>? = null,
     val savings_goal_entries: List<SavingsGoalEntryEntity>? = null,
     val group_expenses: List<com.example.data.local.entity.GroupExpenseEntity>? = null,
-    val group_expense_shares: List<com.example.data.local.entity.GroupExpenseShareEntity>? = null
+    val group_expense_shares: List<com.example.data.local.entity.GroupExpenseShareEntity>? = null,
+    val account_balance_snapshots: List<com.example.data.local.entity.AccountBalanceSnapshotEntity>? = null
 )
 
 class BackupManager(private val database: FinTrackDatabase) {
@@ -40,7 +41,7 @@ class BackupManager(private val database: FinTrackDatabase) {
 
     companion object {
         const val CURRENT_BACKUP_FORMAT_VERSION = 1
-        const val CURRENT_DATABASE_SCHEMA_VERSION = 9
+        const val CURRENT_DATABASE_SCHEMA_VERSION = 11
     }
 
     suspend fun createBackupJson(): String = withContext(Dispatchers.IO) {
@@ -55,6 +56,7 @@ class BackupManager(private val database: FinTrackDatabase) {
         val savingsGoalEntries = database.savingsGoalDao().getAllEntries().first()
         val groupExpenses = database.groupExpenseDao().getAllEntities()
         val groupExpenseShares = database.groupExpenseDao().getAllShares()
+        val balanceSnapshots = database.accountBalanceSnapshotDao().getAll().first()
 
         val backupData = BackupData(
             backupFormatVersion = CURRENT_BACKUP_FORMAT_VERSION,
@@ -71,7 +73,8 @@ class BackupManager(private val database: FinTrackDatabase) {
             savings_goals = savingsGoals,
             savings_goal_entries = savingsGoalEntries,
             group_expenses = groupExpenses,
-            group_expense_shares = groupExpenseShares
+            group_expense_shares = groupExpenseShares,
+            account_balance_snapshots = balanceSnapshots
         )
         gson.toJson(backupData)
     }
@@ -93,6 +96,7 @@ class BackupManager(private val database: FinTrackDatabase) {
 
             database.withTransaction {
                 // Delete in reverse order of foreign key dependencies
+                database.accountBalanceSnapshotDao().deleteAll()
                 database.savingsGoalDao().deleteAllEntries()
                 database.savingsGoalDao().deleteAll()
                 database.recurringDao().deleteAll()
@@ -141,6 +145,10 @@ class BackupManager(private val database: FinTrackDatabase) {
 
                 backupData.group_expense_shares?.let { shareList ->
                     database.groupExpenseDao().insertShares(shareList)
+                }
+
+                backupData.account_balance_snapshots?.let { snapshotList ->
+                    snapshotList.forEach { database.accountBalanceSnapshotDao().insert(it) }
                 }
             }
             true

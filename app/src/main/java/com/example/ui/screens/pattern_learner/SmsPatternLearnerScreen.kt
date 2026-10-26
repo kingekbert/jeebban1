@@ -390,6 +390,7 @@ private fun ExtractedFieldRow(
         FieldType.BANK_NAME -> MaterialTheme.colorScheme.secondaryContainer
         FieldType.ACCOUNT_IDENTIFIER -> MaterialTheme.colorScheme.tertiaryContainer
         FieldType.DATE_YEAR, FieldType.DATE_MONTH, FieldType.DATE_DAY, FieldType.TIME_HOUR, FieldType.TIME_MINUTE -> MaterialTheme.colorScheme.surfaceVariant
+        FieldType.BALANCE -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.25f)
         FieldType.IGNORE -> MaterialTheme.colorScheme.surface
         else -> MaterialTheme.colorScheme.surface
     }

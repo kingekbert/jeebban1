@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,6 +93,7 @@ fun ScanSmsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToPreConfirm: () -> Unit,
     onNavigateToPatternLearnerWithText: (String) -> Unit = {},
+    onNavigateToReconciliation: (accountId: Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -510,6 +512,7 @@ fun ScanSmsScreen(
                         ScannedSmsCard(
                             item = item,
                             matchingTransfer = matchingTransfer,
+                            onReconcileClick = { accId -> onNavigateToReconciliation(accId) },
                             onAddClick = {
                                 try {
                                     if (matchingTransfer != null && !matchingTransfer.isRegistered) {
@@ -793,6 +796,7 @@ fun DetectedTransferCard(
 fun ScannedSmsCard(
     item: ScannedSmsItem,
     matchingTransfer: DetectedTransfer? = null,
+    onReconcileClick: (accountId: Long) -> Unit = {},
     onAddClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
@@ -976,6 +980,33 @@ fun ScannedSmsCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = subtextColor
                         )
+                    }
+                }
+
+                if (item.balanceDiff != null && item.balanceDiff != 0L && item.matchedAccountId != null) {
+                    val absDiff = kotlin.math.abs(item.balanceDiff)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f))
+                            .clickable { onReconcileClick(item.matchedAccountId) }
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "مانده با اپ نمی‌خواند (${AmountFormatter.format(absDiff)} ریال)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

@@ -30,9 +30,10 @@ import kotlinx.coroutines.launch
         com.example.data.local.entity.SavingsGoalEntryEntity::class,
         com.example.data.local.entity.GroupExpenseEntity::class,
         com.example.data.local.entity.GroupExpenseShareEntity::class,
-        com.example.data.local.entity.AccountSmsSenderEntity::class
+        com.example.data.local.entity.AccountSmsSenderEntity::class,
+        com.example.data.local.entity.AccountBalanceSnapshotEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class FinTrackDatabase : RoomDatabase() {
@@ -47,6 +48,7 @@ abstract class FinTrackDatabase : RoomDatabase() {
     abstract fun savingsGoalDao(): com.example.data.local.dao.SavingsGoalDao
     abstract fun groupExpenseDao(): com.example.data.local.dao.GroupExpenseDao
     abstract fun accountSmsSenderDao(): com.example.data.local.dao.AccountSmsSenderDao
+    abstract fun accountBalanceSnapshotDao(): com.example.data.local.dao.AccountBalanceSnapshotDao
 
     companion object {
         @Volatile
@@ -233,6 +235,23 @@ abstract class FinTrackDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_10_11 = object : androidx.room.migration.Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `account_balance_snapshots` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `accountId` INTEGER NOT NULL,
+                        `smsDate` INTEGER NOT NULL,
+                        `balance` INTEGER NOT NULL,
+                        `smsHash` TEXT NOT NULL,
+                        FOREIGN KEY(`accountId`) REFERENCES `accounts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_account_balance_snapshots_accountId` ON `account_balance_snapshots` (`accountId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_account_balance_snapshots_accountId_smsDate` ON `account_balance_snapshots` (`accountId`, `smsDate`)")
+            }
+        }
+
         fun getInstance(context: Context): FinTrackDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -240,7 +259,7 @@ abstract class FinTrackDatabase : RoomDatabase() {
                     FinTrackDatabase::class.java,
                     Constants.DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 .build()
                 INSTANCE = instance
                 instance

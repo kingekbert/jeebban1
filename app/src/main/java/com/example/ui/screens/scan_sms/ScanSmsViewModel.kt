@@ -27,7 +27,9 @@ data class ScannedSmsItem(
     val date: Long,
     val isRecognized: Boolean = true,
     val isRegistered: Boolean = false,
-    val sender: String = ""
+    val sender: String = "",
+    val balanceDiff: Long? = null,
+    val matchedAccountId: Long? = null
 )
 
 data class ScanSmsUiState(
@@ -44,7 +46,8 @@ class ScanSmsViewModel(
     private val transactionRepository: TransactionRepository,
     private val accountRepository: AccountRepository,
     private val smsPatternRepository: SmsPatternRepository,
-    private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null
+    private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null,
+    private val reconciliationRepository: com.example.data.repository.ReconciliationRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanSmsUiState())
@@ -193,6 +196,28 @@ class ScanSmsViewModel(
                                 // Avoid duplicate within current scan list
                                 if (scannedResult.any { it.smsHash == hash }) continue
 
+                                var itemBalDiff: Long? = null
+                                var itemMatchedAccId: Long? = null
+                                if (effectiveParsed.balance != null) {
+                                    val matchedAcc = senderAccount ?: if (effectiveAccountIdent.isNotBlank()) {
+                                        allAccounts.find { acc ->
+                                            (acc.cardNumber != null && (acc.cardNumber.contains(effectiveAccountIdent) || effectiveAccountIdent.contains(acc.cardNumber.takeLast(4)))) ||
+                                            (acc.shabaNumber != null && acc.shabaNumber.contains(effectiveAccountIdent)) ||
+                                            (acc.name.contains(effectiveAccountIdent) || effectiveAccountIdent.contains(acc.name))
+                                        }
+                                    } else if (effectiveBankName.isNotBlank()) {
+                                        allAccounts.find { acc -> acc.name.contains(effectiveBankName) || effectiveBankName.contains(acc.name) }
+                                    } else null
+
+                                    if (matchedAcc != null) {
+                                        itemMatchedAccId = matchedAcc.id
+                                        val appBal = reconciliationRepository?.calculateAppBalanceAtDate(matchedAcc.id, smsDate)
+                                        if (appBal != null) {
+                                            itemBalDiff = effectiveParsed.balance - appBal
+                                        }
+                                    }
+                                }
+
                                 scannedResult.add(
                                     ScannedSmsItem(
                                         id = hash,
@@ -202,7 +227,9 @@ class ScanSmsViewModel(
                                         date = smsDate,
                                         isRecognized = true,
                                         isRegistered = isRegistered,
-                                        sender = sender
+                                        sender = sender,
+                                        balanceDiff = itemBalDiff,
+                                        matchedAccountId = itemMatchedAccId
                                     )
                                 )
                             }
@@ -368,11 +395,18 @@ class ScanSmsViewModel(
         private val transactionRepository: TransactionRepository,
         private val accountRepository: AccountRepository,
         private val smsPatternRepository: SmsPatternRepository,
-        private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null
+        private val accountSmsSenderRepository: com.example.data.repository.AccountSmsSenderRepository? = null,
+        private val reconciliationRepository: com.example.data.repository.ReconciliationRepository? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ScanSmsViewModel(transactionRepository, accountRepository, smsPatternRepository, accountSmsSenderRepository) as T
+            return ScanSmsViewModel(
+                transactionRepository,
+                accountRepository,
+                smsPatternRepository,
+                accountSmsSenderRepository,
+                reconciliationRepository
+            ) as T
         }
     }
 }

@@ -4,12 +4,13 @@ import com.example.data.local.entity.SmsPatternEntity
 import com.example.data.local.entity.TransactionType
 
 data class ParsedSms(
-    val bankName: String?,
-    val transactionType: TransactionType?,   // EXPENSE or INCOME
-    val amount: Long?,                       // amount in Rials (integer)
-    val date: Long?,                         // timestamp
-    val accountIdentifier: String?,          // account number or last 4 digits of card
-    val rawDescription: String?              // transaction type (قبض، حقوق، برداشت و...)
+    val bankName: String? = null,
+    val transactionType: TransactionType? = null,   // EXPENSE or INCOME
+    val amount: Long? = null,                       // amount in Rials (integer)
+    val date: Long? = null,                         // timestamp
+    val accountIdentifier: String? = null,          // account number or last 4 digits of card
+    val rawDescription: String? = null,             // transaction type (قبض، حقوق، برداشت و...)
+    val balance: Long? = null                       // remaining balance in Rials
 )
 
 object SmsParser {

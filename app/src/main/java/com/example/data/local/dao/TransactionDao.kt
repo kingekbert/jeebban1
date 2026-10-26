@@ -216,4 +216,7 @@ interface TransactionDao {
 
     @Query("SELECT COUNT(*) FROM transactions WHERE recurringId = :recurringId AND executedForDate = :executedForDate")
     suspend fun countByRecurringAndDate(recurringId: Long, executedForDate: Long): Int
+
+    @Query("SELECT * FROM transactions WHERE (accountId = :accountId OR toAccountId = :accountId) AND date <= :date ORDER BY date ASC")
+    suspend fun getTransactionsForAccountUpToDate(accountId: Long, date: Long): List<TransactionEntity>
 }

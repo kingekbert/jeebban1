@@ -199,6 +199,20 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
                 }
 
                 if (isSuccess) {
+                    val currentItem = WidgetDataStore.getItems(this@WidgetCategoryPickerActivity).find { it.smsHash == smsHash }
+                    val extractedBalance = currentItem?.parsedSms?.balance
+                    if (accountId != null && extractedBalance != null && extractedBalance > 0L) {
+                        try {
+                            appModule.reconciliationRepository.recordSnapshot(
+                                accountId = accountId,
+                                smsDate = date,
+                                balance = extractedBalance,
+                                smsHash = smsHash
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
                     val remaining = WidgetDataStore.removeItem(this@WidgetCategoryPickerActivity, smsHash)
                     val curIdx = WidgetStatusHelper.getCurrentTransactionIndex(this@WidgetCategoryPickerActivity)
                     if (curIdx >= remaining.size) {
