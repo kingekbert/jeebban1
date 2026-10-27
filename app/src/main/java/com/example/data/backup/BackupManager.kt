@@ -41,7 +41,7 @@ class BackupManager(private val database: FinTrackDatabase) {
 
     companion object {
         const val CURRENT_BACKUP_FORMAT_VERSION = 1
-        const val CURRENT_DATABASE_SCHEMA_VERSION = 11
+        const val CURRENT_DATABASE_SCHEMA_VERSION = 12
     }
 
     suspend fun createBackupJson(): String = withContext(Dispatchers.IO) {

@@ -15,10 +15,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +46,7 @@ import com.example.util.DateFormatter
 fun TransactionCard(
     transactionWithDetails: TransactionWithDetails,
     onClick: () -> Unit = {},
+    onToggleBookmark: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val tx = transactionWithDetails.transaction
@@ -156,11 +160,36 @@ fun TransactionCard(
                     )
                 }
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = DateFormatter.formatShort(tx.date),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = DateFormatter.formatShort(tx.date),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (onToggleBookmark != null) {
+                        IconButton(
+                            onClick = onToggleBookmark,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (tx.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                contentDescription = if (tx.isBookmarked) "حذف نشان" else "نشانه‌گذاری",
+                                tint = if (tx.isBookmarked) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    } else if (tx.isBookmarked) {
+                        Icon(
+                            imageVector = Icons.Filled.Bookmark,
+                            contentDescription = "نشانه‌دار",
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
             }
         }
     }

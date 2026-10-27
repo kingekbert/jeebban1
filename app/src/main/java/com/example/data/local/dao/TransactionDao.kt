@@ -33,6 +33,9 @@ interface TransactionDao {
     @Query("DELETE FROM transactions WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("UPDATE transactions SET isBookmarked = :isBookmarked WHERE id = :id")
+    suspend fun updateBookmark(id: Long, isBookmarked: Boolean)
+
     @Query("SELECT * FROM transactions ORDER BY date DESC")
     fun getAll(): Flow<List<TransactionEntity>>
 

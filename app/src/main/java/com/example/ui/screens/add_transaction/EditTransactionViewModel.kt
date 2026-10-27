@@ -32,7 +32,8 @@ data class EditTransactionUiState(
     val categories: List<CategoryEntity> = emptyList(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val isSuccess: Boolean = false
+    val isSuccess: Boolean = false,
+    val isBookmarked: Boolean = false
 )
 
 class EditTransactionViewModel(
@@ -79,7 +80,8 @@ class EditTransactionViewModel(
                     note = tx.note ?: "",
                     accounts = accounts,
                     categories = filteredCats,
-                    isLoading = false
+                    isLoading = false,
+                    isBookmarked = tx.isBookmarked
                 )
             } else {
                 _uiState.value = _uiState.value.copy(
@@ -181,7 +183,8 @@ class EditTransactionViewModel(
                 categoryId = if (state.type != TransactionType.TRANSFER) state.selectedCategory?.id else null,
                 date = finalTimestamp,
                 note = state.note.ifBlank { null },
-                createdAt = System.currentTimeMillis()
+                createdAt = System.currentTimeMillis(),
+                isBookmarked = state.isBookmarked
             )
 
             transactionRepository.updateTransaction(updatedTransaction)

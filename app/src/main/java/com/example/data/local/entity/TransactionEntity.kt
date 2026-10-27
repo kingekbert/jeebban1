@@ -51,5 +51,6 @@ data class TransactionEntity(
     val smsHash: String? = null,
     val recurringId: Long? = null,
     val executedForDate: Long? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val isBookmarked: Boolean = false
 )

@@ -81,6 +81,10 @@ class TransactionRepository(private val transactionDao: TransactionDao) {
         transactionDao.delete(transaction)
     }
 
+    suspend fun updateBookmark(id: Long, isBookmarked: Boolean) = withContext(Dispatchers.IO) {
+        transactionDao.updateBookmark(id, isBookmarked)
+    }
+
     val allSmsHashes: Flow<List<String>> = transactionDao.getAllSmsHashes()
 
     suspend fun getAllSmsHashesList(): List<String> = withContext(Dispatchers.IO) {

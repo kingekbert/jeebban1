@@ -19,8 +19,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -67,7 +69,9 @@ fun FilterBottomSheet(
     transactionType: TransactionType?,
     accounts: List<AccountEntity>,
     categories: List<CategoryEntity>,
+    onlyBookmarked: Boolean = false,
     allowTransfer: Boolean = true,
+    allowBookmark: Boolean = true,
     onDismiss: () -> Unit,
     onApply: (
         period: DateFilterPeriod,
@@ -75,7 +79,8 @@ fun FilterBottomSheet(
         customEnd: Long?,
         accountId: Long?,
         categoryIds: Set<Long>,
-        type: TransactionType?
+        type: TransactionType?,
+        onlyBookmarked: Boolean
     ) -> Unit,
     onReset: () -> Unit
 ) {
@@ -87,6 +92,7 @@ fun FilterBottomSheet(
     var tempAccountId by remember { mutableStateOf(accountId) }
     var tempCategoryIds by remember { mutableStateOf(categoryIds) }
     var tempType by remember { mutableStateOf(transactionType) }
+    var tempOnlyBookmarked by remember { mutableStateOf(onlyBookmarked) }
     var showCustomDatePicker by remember { mutableStateOf(false) }
 
     if (showCustomDatePicker) {
@@ -273,6 +279,36 @@ fun FilterBottomSheet(
                 }
             }
 
+            if (allowBookmark) {
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // وضعیت نشانه‌گذاری
+                Text(
+                    text = "وضعیت نشانه‌گذاری",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                FilterChip(
+                    selected = tempOnlyBookmarked,
+                    onClick = { tempOnlyBookmarked = !tempOnlyBookmarked },
+                    label = { Text("فقط تراکنش‌های نشانه‌دار") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (tempOnlyBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFFF59E0B).copy(alpha = 0.2f),
+                        selectedLabelColor = Color(0xFFB45309),
+                        selectedLeadingIconColor = Color(0xFFD97706)
+                    )
+                )
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
 
             // 4. دسته‌بندی (چند انتخابی)
@@ -396,6 +432,7 @@ fun FilterBottomSheet(
                         tempAccountId = null
                         tempCategoryIds = emptySet()
                         tempType = null
+                        tempOnlyBookmarked = false
                         onReset()
                     },
                     modifier = Modifier.weight(1f),
@@ -412,7 +449,8 @@ fun FilterBottomSheet(
                             tempCustomEnd,
                             tempAccountId,
                             tempCategoryIds,
-                            tempType
+                            tempType,
+                            tempOnlyBookmarked
                         )
                     },
                     modifier = Modifier.weight(1f),
@@ -424,3 +462,47 @@ fun FilterBottomSheet(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FilterBottomSheet(
+    period: DateFilterPeriod,
+    customStart: Long?,
+    customEnd: Long?,
+    accountId: Long?,
+    categoryIds: Set<Long>,
+    transactionType: TransactionType?,
+    accounts: List<AccountEntity>,
+    categories: List<CategoryEntity>,
+    allowTransfer: Boolean = true,
+    onDismiss: () -> Unit,
+    onApply: (
+        period: DateFilterPeriod,
+        customStart: Long?,
+        customEnd: Long?,
+        accountId: Long?,
+        categoryIds: Set<Long>,
+        type: TransactionType?
+    ) -> Unit,
+    onReset: () -> Unit
+) {
+    FilterBottomSheet(
+        period = period,
+        customStart = customStart,
+        customEnd = customEnd,
+        accountId = accountId,
+        categoryIds = categoryIds,
+        transactionType = transactionType,
+        accounts = accounts,
+        categories = categories,
+        onlyBookmarked = false,
+        allowTransfer = allowTransfer,
+        allowBookmark = false,
+        onDismiss = onDismiss,
+        onApply = { p, cs, ce, a, c, t, _ ->
+            onApply(p, cs, ce, a, c, t)
+        },
+        onReset = onReset
+    )
+}
+

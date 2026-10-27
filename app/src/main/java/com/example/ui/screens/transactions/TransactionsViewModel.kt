@@ -54,6 +54,7 @@ data class TransactionsUiState(
     val groupedTransactions: Map<String, List<TransactionWithDetails>> = emptyMap(),
     val totalIncome: Long = 0L,
     val totalExpense: Long = 0L,
+    val onlyBookmarked: Boolean = false,
     val isLoading: Boolean = false
 ) {
     val activeFilterCount: Int
@@ -64,6 +65,7 @@ data class TransactionsUiState(
             if (selectedAccountId != null) count++
             if (selectedCategoryIds.isNotEmpty()) count++
             if (selectedType != null) count++
+            if (onlyBookmarked) count++
             return count
         }
 }
@@ -86,6 +88,7 @@ class TransactionsViewModel(
     private val _selectedDayTimestamp = MutableStateFlow<Long?>(null)
     private val _isFullscreen = MutableStateFlow(false)
     private val _zoomLevel = MutableStateFlow(1.0f)
+    private val _onlyBookmarked = MutableStateFlow(false)
 
     private var recentlyDeletedTransaction: TransactionEntity? = null
 
@@ -104,7 +107,8 @@ class TransactionsViewModel(
         _customEndTimestamp,
         _isFullscreen,
         _zoomLevel,
-        _selectedDayTimestamp
+        _selectedDayTimestamp,
+        _onlyBookmarked
     ) { flows: Array<Any?> ->
         @Suppress("UNCHECKED_CAST")
         val transactions = flows[0] as List<TransactionWithDetails>
@@ -126,6 +130,7 @@ class TransactionsViewModel(
         val isFullscreen = flows[12] as Boolean
         val zoom = flows[13] as Float
         val selectedDay = flows[14] as Long?
+        val onlyBookmarked = flows[15] as Boolean
 
         val zoneId = ZoneId.systemDefault()
         val todayJalali = JalaliDate.today(zoneId)
@@ -190,7 +195,9 @@ class TransactionsViewModel(
                 date in dayStart..dayEnd
             } else true
 
-            matchesPeriod && matchesDay && matchesType && matchesAccount && matchesCategory && matchesQuery
+            val matchesBookmarked = !onlyBookmarked || tx.transaction.isBookmarked
+
+            matchesPeriod && matchesDay && matchesType && matchesAccount && matchesCategory && matchesQuery && matchesBookmarked
         }
 
         // Compute total income and expense for filtered list
@@ -245,6 +252,7 @@ class TransactionsViewModel(
             groupedTransactions = grouped,
             totalIncome = incomeSum,
             totalExpense = expenseSum,
+            onlyBookmarked = onlyBookmarked,
             isLoading = false
         )
     }.stateIn(
@@ -267,7 +275,8 @@ class TransactionsViewModel(
         customEnd: Long?,
         accountId: Long?,
         categoryIds: Set<Long>,
-        type: TransactionType?
+        type: TransactionType?,
+        onlyBookmarked: Boolean = false
     ) {
         _selectedPeriod.value = period
         _customStartTimestamp.value = customStart
@@ -275,6 +284,7 @@ class TransactionsViewModel(
         _selectedAccountId.value = accountId
         _selectedCategoryIds.value = categoryIds
         _selectedType.value = type
+        _onlyBookmarked.value = onlyBookmarked
     }
 
     fun resetFilters() {
@@ -285,6 +295,21 @@ class TransactionsViewModel(
         _selectedAccountId.value = null
         _selectedCategoryIds.value = emptySet()
         _selectedType.value = null
+        _onlyBookmarked.value = false
+    }
+
+    fun toggleBookmark(transaction: TransactionEntity) {
+        viewModelScope.launch {
+            transactionRepository.updateBookmark(transaction.id, !transaction.isBookmarked)
+        }
+    }
+
+    fun setOnlyBookmarked(only: Boolean) {
+        _onlyBookmarked.value = only
+    }
+
+    fun toggleOnlyBookmarked() {
+        _onlyBookmarked.value = !_onlyBookmarked.value
     }
 
     fun setDayFilter(timestamp: Long) {

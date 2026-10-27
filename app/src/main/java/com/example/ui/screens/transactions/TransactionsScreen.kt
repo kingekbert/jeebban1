@@ -22,8 +22,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
@@ -155,10 +157,11 @@ fun TransactionsScreen(
             transactionType = state.selectedType,
             accounts = state.accounts,
             categories = state.categories,
+            onlyBookmarked = state.onlyBookmarked,
             allowTransfer = true,
             onDismiss = { showFilterBottomSheet = false },
-            onApply = { period, customStart, customEnd, accountId, categoryIds, type ->
-                viewModel.applyFilters(period, customStart, customEnd, accountId, categoryIds, type)
+            onApply = { period, customStart, customEnd, accountId, categoryIds, type, onlyBookmarked ->
+                viewModel.applyFilters(period, customStart, customEnd, accountId, categoryIds, type, onlyBookmarked)
                 showFilterBottomSheet = false
             },
             onReset = {
@@ -383,39 +386,77 @@ fun TransactionsScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // Day Filter Chip
-                if (state.selectedDayTimestamp != null) {
-                    val dayFormatted = JalaliDate.fromTimestamp(state.selectedDayTimestamp!!).format(includeDayName = true)
+                // Active Filter Chips
+                if (state.selectedDayTimestamp != null || state.onlyBookmarked) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        InputChip(
-                            selected = true,
-                            onClick = { viewModel.clearDayFilter() },
-                            label = {
-                                Text(
-                                    text = "فیلتر روز: $dayFormatted",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            },
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "حذف فیلتر روز",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            colors = InputChipDefaults.inputChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            shape = RoundedCornerShape(8.dp)
-                        )
+                        if (state.selectedDayTimestamp != null) {
+                            val dayFormatted = JalaliDate.fromTimestamp(state.selectedDayTimestamp!!).format(includeDayName = true)
+                            InputChip(
+                                selected = true,
+                                onClick = { viewModel.clearDayFilter() },
+                                label = {
+                                    Text(
+                                        text = "فیلتر روز: $dayFormatted",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "حذف فیلتر روز",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = InputChipDefaults.inputChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+
+                        if (state.onlyBookmarked) {
+                            InputChip(
+                                selected = true,
+                                onClick = { viewModel.setOnlyBookmarked(false) },
+                                label = {
+                                    Text(
+                                        text = "فقط نشانه‌دارها",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Bookmark,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF59E0B),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "حذف فیلتر نشانه‌دار",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = InputChipDefaults.inputChipColors(
+                                    selectedContainerColor = Color(0xFFF59E0B).copy(alpha = 0.15f),
+                                    selectedLabelColor = Color(0xFFB45309),
+                                    selectedTrailingIconColor = Color(0xFFB45309)
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
                     }
                 }
 
@@ -597,12 +638,14 @@ fun TransactionsScreen(
                                             CompactTransactionCard(
                                                 transactionWithDetails = item,
                                                 zoomLevel = state.zoomLevel,
-                                                onClick = { onNavigateToEditTransaction(item.transaction.id) }
+                                                onClick = { onNavigateToEditTransaction(item.transaction.id) },
+                                                onToggleBookmark = { viewModel.toggleBookmark(item.transaction) }
                                             )
                                         } else {
                                             TransactionCard(
                                                 transactionWithDetails = item,
-                                                onClick = { onNavigateToEditTransaction(item.transaction.id) }
+                                                onClick = { onNavigateToEditTransaction(item.transaction.id) },
+                                                onToggleBookmark = { viewModel.toggleBookmark(item.transaction) }
                                             )
                                         }
                                     }
@@ -668,6 +711,7 @@ private fun CompactTransactionCard(
     transactionWithDetails: TransactionWithDetails,
     zoomLevel: Float = 1.0f,
     onClick: () -> Unit = {},
+    onToggleBookmark: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val tx = transactionWithDetails.transaction
@@ -759,11 +803,36 @@ private fun CompactTransactionCard(
                     fontWeight = FontWeight.Bold,
                     color = amountColor
                 )
-                Text(
-                    text = DateFormatter.formatShort(tx.date),
-                    fontSize = subFontSize,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = DateFormatter.formatShort(tx.date),
+                        fontSize = subFontSize,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (onToggleBookmark != null) {
+                        IconButton(
+                            onClick = onToggleBookmark,
+                            modifier = Modifier.size((20 * zoomLevel).coerceIn(20f, 32f).dp)
+                        ) {
+                            Icon(
+                                imageVector = if (tx.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                contentDescription = if (tx.isBookmarked) "حذف نشان" else "نشانه‌گذاری",
+                                tint = if (tx.isBookmarked) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                modifier = Modifier.size((15 * zoomLevel).coerceIn(15f, 22f).dp)
+                            )
+                        }
+                    } else if (tx.isBookmarked) {
+                        Icon(
+                            imageVector = Icons.Filled.Bookmark,
+                            contentDescription = "نشانه‌دار",
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size((14 * zoomLevel).coerceIn(14f, 20f).dp)
+                        )
+                    }
+                }
             }
         }
     }
