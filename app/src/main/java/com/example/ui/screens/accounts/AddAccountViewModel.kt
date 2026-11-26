@@ -11,7 +11,9 @@ import com.example.data.repository.AccountSmsSenderRepository
 import com.example.util.BankLogos
 import com.example.util.SmsConversationInfo
 import com.example.util.SmsConversationReader
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,6 +53,8 @@ class AddAccountViewModel(
 
     private val _uiState = MutableStateFlow(AddAccountUiState(accountId = editAccountId))
     val uiState: StateFlow<AddAccountUiState> = _uiState.asStateFlow()
+
+    private var conversationsJob: Job? = null
 
     init {
         if (editAccountId != null && editAccountId > 0) {
@@ -173,8 +177,16 @@ class AddAccountViewModel(
     }
 
     fun setShowConversationDialog(show: Boolean, context: Context? = null) {
-        _uiState.value = _uiState.value.copy(showConversationDialog = show)
-        if (show && context != null) {
+        if (!show) {
+            conversationsJob?.cancel()
+            _uiState.value = _uiState.value.copy(
+                showConversationDialog = false,
+                isLoadingConversations = false
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(showConversationDialog = true)
+        if (context != null) {
             loadConversations(context)
         }
     }
@@ -184,15 +196,27 @@ class AddAccountViewModel(
     }
 
     fun loadConversations(context: Context) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoadingConversations = true)
-            val list = withContext(Dispatchers.IO) {
-                SmsConversationReader.getConversations(context)
+        val appContext = context.applicationContext ?: context
+        conversationsJob?.cancel()
+        conversationsJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingConversations = true, errorMessage = null)
+            try {
+                val list = withContext(Dispatchers.IO) {
+                    SmsConversationReader.getConversations(appContext)
+                }
+                _uiState.value = _uiState.value.copy(
+                    conversationList = list,
+                    isLoadingConversations = false
+                )
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (_: Throwable) {
+                _uiState.value = _uiState.value.copy(
+                    conversationList = emptyList(),
+                    isLoadingConversations = false,
+                    errorMessage = "خطا در خواندن فهرست پیامک‌ها. لطفاً مجوز پیامک را بررسی کنید."
+                )
             }
-            _uiState.value = _uiState.value.copy(
-                conversationList = list,
-                isLoadingConversations = false
-            )
         }
     }
 

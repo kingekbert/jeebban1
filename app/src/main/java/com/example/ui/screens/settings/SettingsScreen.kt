@@ -164,10 +164,7 @@ fun SettingsScreen(
         }
     }
 
-    // Document Picker Launcher for Importing Backup (.ftb or .json)
-    val openDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
+    val handleSelectedBackupUri: (android.net.Uri?) -> Unit = { uri ->
         uri?.let { sourceUri ->
             coroutineScope.launch(Dispatchers.IO) {
                 try {
@@ -187,6 +184,27 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+    }
+
+    // Primary SAF Document Picker Launcher for Importing Backup (.ftb or .json)
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = handleSelectedBackupUri
+    )
+
+    // Fallback GetContent Launcher for devices with custom file pickers
+    val getContentFallbackLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = handleSelectedBackupUri
+    )
+
+    // Last-resort explicit chooser launcher
+    val chooserFallbackLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            handleSelectedBackupUri(result.data?.data)
         }
     }
 
@@ -506,14 +524,27 @@ fun SettingsScreen(
                         onClick = {
                             showRestoreOptionsDialog = false
                             try {
-                                openDocumentLauncher.launch("*/*")
+                                openDocumentLauncher.launch(arrayOf("*/*"))
                             } catch (e: Exception) {
-                                Toast.makeText(
-                                    context,
-                                    "برنامه مدیریت فایل یافت نشد. می‌توانید متن فایل را مستقیماً وارد کنید.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                showPasteJsonDialog = true
+                                try {
+                                    getContentFallbackLauncher.launch("*/*")
+                                } catch (e2: Exception) {
+                                    try {
+                                        val fallbackIntent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
+                                            type = "*/*"
+                                        }
+                                        chooserFallbackLauncher.launch(
+                                            android.content.Intent.createChooser(fallbackIntent, "انتخاب فایل پشتیبان")
+                                        )
+                                    } catch (e3: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            "برنامه مدیریت فایل یافت نشد. می‌توانید متن فایل را مستقیماً وارد کنید.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        showPasteJsonDialog = true
+                                    }
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),

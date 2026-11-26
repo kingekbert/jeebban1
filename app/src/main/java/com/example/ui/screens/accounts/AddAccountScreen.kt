@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -61,6 +62,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -80,6 +82,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.entity.AccountType
@@ -141,7 +145,7 @@ fun AddAccountScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            viewModel.setShowConversationDialog(true, context)
+            viewModel.setShowConversationDialog(true, context.applicationContext)
         } else {
             Toast.makeText(context, "برای مشاهده کانورسیشن‌ها مجوز خواندن پیامک لازم است", Toast.LENGTH_SHORT).show()
         }
@@ -330,14 +334,22 @@ fun AddAccountScreen(
                     ) {
                         OutlinedButton(
                             onClick = {
-                                val hasPermission = ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.READ_SMS
-                                ) == PackageManager.PERMISSION_GRANTED
-                                if (hasPermission) {
-                                    viewModel.setShowConversationDialog(true, context)
-                                } else {
-                                    smsPermissionLauncher.launch(Manifest.permission.READ_SMS)
+                                try {
+                                    val hasPermission = ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.READ_SMS
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                    if (hasPermission) {
+                                        viewModel.setShowConversationDialog(true, context.applicationContext)
+                                    } else {
+                                        smsPermissionLauncher.launch(Manifest.permission.READ_SMS)
+                                    }
+                                } catch (_: Throwable) {
+                                    Toast.makeText(
+                                        context,
+                                        "خطا در درخواست مجوز پیامک. می‌توانید سرشماره را دستی وارد کنید.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             },
                             modifier = Modifier.weight(1.3f),
@@ -667,18 +679,30 @@ fun ConversationSelectionDialog(
         }
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text("انتخاب کانورسیشن پیامک", fontWeight = FontWeight.Bold)
-        },
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 420.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                Text(
+                    text = "انتخاب کانورسیشن پیامک",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -695,7 +719,7 @@ fun ConversationSelectionDialog(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(160.dp),
+                            .height(180.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(36.dp))
@@ -715,10 +739,24 @@ fun ConversationSelectionDialog(
                     }
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 160.dp, max = 340.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(filteredList, key = { it.address }) { item ->
+                        itemsIndexed(
+                            items = filteredList,
+                            key = { index, item -> "${item.address}_$index" }
+                        ) { _, item ->
+                            val formattedDate = remember(item.date) {
+                                if (item.date > 0L) {
+                                    runCatching {
+                                        val jalali = JalaliDate.fromTimestamp(item.date)
+                                        "${jalali.year}/${jalali.month.toString().padStart(2, '0')}/${jalali.day.toString().padStart(2, '0')}".toPersianDigits()
+                                    }.getOrNull()
+                                } else null
+                            }
+
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -743,12 +781,15 @@ fun ConversationSelectionDialog(
                                             text = item.address.toPersianDigits(),
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.primary
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
                                         )
-                                        if (item.date > 0) {
-                                            val jalali = JalaliDate.fromTimestamp(item.date)
+                                        if (formattedDate != null) {
+                                            Spacer(modifier = Modifier.width(8.dp))
                                             Text(
-                                                text = "${jalali.year}/${jalali.month.toString().padStart(2, '0')}/${jalali.day.toString().padStart(2, '0')}".toPersianDigits(),
+                                                text = formattedDate,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -769,15 +810,18 @@ fun ConversationSelectionDialog(
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("بستن")
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("بستن")
+                    }
+                }
             }
         }
-    )
+    }
 }
 
 @Composable
