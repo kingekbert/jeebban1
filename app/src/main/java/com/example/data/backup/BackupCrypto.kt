@@ -128,6 +128,9 @@ object BackupCrypto {
      */
     fun decryptFromString(rawText: String): DecryptResult {
         val trimmed = rawText.trim()
+        if (trimmed.isEmpty()) {
+            return DecryptResult.Error("متن پشتیبان خالی است.")
+        }
         if (trimmed.startsWith("{")) {
             return DecryptResult.LegacyPlainJson(trimmed)
         }

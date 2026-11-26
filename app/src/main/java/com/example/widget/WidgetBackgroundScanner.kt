@@ -13,9 +13,8 @@ import com.example.FinTrackApp
 import com.example.MainActivity
 import com.example.data.local.entity.TransactionType
 import com.example.ui.screens.scan_sms.ScannedSmsItem
-import com.example.util.JalaliDate
+import com.example.util.SmsDeduplicator
 import com.example.util.SmsHashUtil
-import com.example.util.SmsParser
 import com.example.util.toPersianDigits
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -87,6 +86,8 @@ object WidgetBackgroundScanner {
             )
 
             val scannedUnregistered = mutableListOf<ScannedSmsItem>()
+            val consumedManualTxIds = mutableSetOf<Long>()
+            val seenHashes = mutableSetOf<String>()
 
             val cursor = context.contentResolver.query(
                 uri, projection, selection, selectionArgs, "date DESC"
@@ -127,58 +128,39 @@ object WidgetBackgroundScanner {
                             accountIdentifier = if (parsed.accountIdentifier.isNullOrBlank()) (senderAccount?.cardNumber?.takeLast(4) ?: "") else parsed.accountIdentifier
                         )
 
-                        val hash = SmsHashUtil.calculateHash(sender, amt, smsDate, body)
-                        val legacyHash = "${amt}_${smsDate}_${effectiveAccountIdent}"
-                        val smsJalali = JalaliDate.fromTimestamp(smsDate)
+                        val hash = SmsHashUtil.calculateHash(
+                            sender = sender,
+                            amount = amt,
+                            date = smsDate,
+                            text = body,
+                            transactionType = txType,
+                            accountIdentifier = effectiveAccountIdent
+                        )
 
-                        val isRegistered = existingTransactions.any { txItem ->
-                            val tx = txItem.transaction
-                            if (!tx.smsHash.isNullOrBlank()) {
-                                if (tx.smsHash == hash || tx.smsHash == legacyHash || tx.smsHash.contains(hash)) {
-                                    return@any true
-                                }
-                                val parts = tx.smsHash.split("|")
-                                if (parts.any { it == hash }) return@any true
-                            }
-                            if (tx.amount != amt) return@any false
-                            val txJalali = JalaliDate.fromTimestamp(tx.date)
-                            val sameDay = txJalali.year == smsJalali.year &&
-                                    txJalali.month == smsJalali.month &&
-                                    txJalali.day == smsJalali.day
-                            if (!sameDay) return@any false
+                        if (!seenHashes.add(hash)) continue
 
-                            if (senderAccount != null && (tx.accountId == senderAccount.id || tx.toAccountId == senderAccount.id)) {
-                                return@any true
-                            }
+                        val legacyHashes = setOf(
+                            SmsHashUtil.calculateLegacyV1Hash(sender, amt, smsDate, body),
+                            SmsHashUtil.calculateLegacySimpleHash(amt, smsDate, effectiveAccountIdent)
+                        )
 
-                            if (effectiveAccountIdent.isNotBlank()) {
-                                val srcAccount = tx.accountId?.let { accountMap[it] }
-                                val destAccount = tx.toAccountId?.let { accountMap[it] }
+                        val isRegistered = SmsDeduplicator.isSmsRegistered(
+                            candidate = SmsDeduplicator.SmsCandidate(
+                                transactionType = txType,
+                                amount = amt,
+                                date = smsDate,
+                                primaryHash = hash,
+                                legacyHashes = legacyHashes,
+                                matchedAccountId = senderAccount?.id,
+                                accountIdent = effectiveAccountIdent,
+                                bankName = effectiveBankName
+                            ),
+                            existingTransactions = existingTransactions,
+                            accountsById = accountMap,
+                            consumedManualTxIds = consumedManualTxIds
+                        )
 
-                                val matchesAccount = { accCard: String?, accShaba: String?, accName: String? ->
-                                    val matchesCard = accCard != null && (accCard.contains(effectiveAccountIdent) || effectiveAccountIdent.contains(accCard.takeLast(4)))
-                                    val matchesShaba = accShaba != null && accShaba.contains(effectiveAccountIdent)
-                                    val matchesName = accName != null && (accName.contains(effectiveAccountIdent) || effectiveAccountIdent.contains(accName))
-                                    val matchesBank = effectiveBankName.isNotBlank() && accName != null && (accName.contains(effectiveBankName) || effectiveBankName.contains(accName))
-                                    matchesCard || matchesShaba || matchesName || matchesBank
-                                }
-
-                                val matchesSrc = matchesAccount(
-                                    srcAccount?.cardNumber ?: txItem.accountCardNumber,
-                                    srcAccount?.shabaNumber,
-                                    srcAccount?.name ?: txItem.accountName
-                                )
-                                val matchesDest = (tx.type == TransactionType.TRANSFER && destAccount != null && matchesAccount(
-                                    destAccount.cardNumber,
-                                    destAccount.shabaNumber,
-                                    destAccount.name
-                                ))
-
-                                matchesSrc || matchesDest
-                            } else true
-                        }
-
-                        if (!isRegistered && scannedUnregistered.none { it.smsHash == hash }) {
+                        if (!isRegistered) {
                             scannedUnregistered.add(
                                 ScannedSmsItem(
                                     id = hash,
@@ -188,7 +170,8 @@ object WidgetBackgroundScanner {
                                     date = smsDate,
                                     isRecognized = true,
                                     isRegistered = false,
-                                    sender = sender
+                                    sender = sender,
+                                    matchedAccountId = senderAccount?.id
                                 )
                             )
                         }

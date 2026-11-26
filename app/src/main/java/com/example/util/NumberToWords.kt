@@ -5,29 +5,50 @@ object NumberToWords {
     private val dahgan = arrayOf("", "ده", "بیست", "سی", "چهل", "پنجاه", "شصت", "هفتاد", "هشتاد", "نود")
     private val dahyek = arrayOf("ده", "یازده", "دوازده", "سیزده", "چهارده", "پانزده", "شانزده", "هفده", "هجده", "نوزده")
     private val sadgan = arrayOf("", "یکصد", "دویست", "سیصد", "چهارصد", "پانصد", "ششصد", "هفتصد", "هشتصد", "نهصد")
-    private val steps = arrayOf("", "هزار", "میلیون", "میلیارد", "تریلیون")
+    private val steps = arrayOf("", "هزار", "میلیون", "میلیارد", "تریلیون", "کوادریلیون", "کوینتیلیون")
 
-    fun convert(amount: Long, suffix: String = "تومان"): String {
-        if (amount == 0L) return "صفر $suffix"
-        if (amount < 0) return "منفی " + convert(-amount, suffix)
+    /**
+     * Converts a numeric amount into Persian words with the caller-provided [suffix] (default: "ریال").
+     * Does not perform any implicit unit conversion (no division or multiplication on [amount]).
+     */
+    fun convert(amount: Long, suffix: String = "ریال"): String {
+        val cleanSuffix = suffix.trim()
+        val unitTail = if (cleanSuffix.isNotEmpty()) " $cleanSuffix" else ""
 
+        if (amount == 0L) {
+            return "صفر$unitTail"
+        }
+
+        val isNegative = amount < 0L
+        val magnitude: ULong = if (isNegative) {
+            (-(amount + 1L)).toULong() + 1uL
+        } else {
+            amount.toULong()
+        }
+
+        val words = convertPositiveMagnitude(magnitude)
+        val prefix = if (isNegative) "منفی " else ""
+        return "$prefix$words$unitTail"
+    }
+
+    private fun convertPositiveMagnitude(value: ULong): String {
         val parts = mutableListOf<String>()
-        var temp = amount
+        var temp = value
         var stepIndex = 0
 
-        while (temp > 0) {
-            val chunk = (temp % 1000).toInt()
+        while (temp > 0uL) {
+            val chunk = (temp % 1000uL).toInt()
             if (chunk > 0) {
                 val chunkText = convertChunk(chunk)
                 val stepName = steps.getOrNull(stepIndex) ?: ""
                 val part = if (stepName.isNotEmpty()) "$chunkText $stepName" else chunkText
                 parts.add(0, part)
             }
-            temp /= 1000
+            temp /= 1000uL
             stepIndex++
         }
 
-        return parts.joinToString(" و ") + (if (suffix.isNotEmpty()) " $suffix" else "")
+        return parts.joinToString(" و ")
     }
 
     private fun convertChunk(number: Int): String {

@@ -491,49 +491,102 @@ fun ScanSmsScreen(
                         }
                     }
 
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "پیامک‌های دریافتی (${state.scannedList.size})".toPersianDigits(),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
+                    val unregisteredItems = state.scannedList.filter { !it.isRegistered }
+                    val registeredItems = state.scannedList.filter { it.isRegistered }
+
+                    if (unregisteredItems.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "پیامک‌های ثبت‌نشده (${unregisteredItems.size})".toPersianDigits(),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(IncomeColor.copy(alpha = 0.14f))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = "آماده ثبت",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = IncomeColor,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        itemsIndexed(unregisteredItems, key = { index, it -> "unreg_${it.id}_$index" }) { _, item ->
+                            val matchingTransfer = state.detectedTransfers.find {
+                                it.withdrawalItem.id == item.id || it.depositItem.id == item.id
+                            }
+                            ScannedSmsCard(
+                                item = item,
+                                matchingTransfer = matchingTransfer,
+                                onReconcileClick = { accId -> onNavigateToReconciliation(accId) },
+                                onAddClick = {
+                                    try {
+                                        if (matchingTransfer != null && !matchingTransfer.isRegistered) {
+                                            ScanSmsDataHolder.detectedTransfer = matchingTransfer
+                                            ScanSmsDataHolder.openAsTransfer = true
+                                        } else {
+                                            ScanSmsDataHolder.detectedTransfer = null
+                                            ScanSmsDataHolder.openAsTransfer = false
+                                        }
+                                        sharedScanViewModel.setPendingScanItem(item)
+                                        ScanSmsDataHolder.selectedItem = item
+                                        onNavigateToPreConfirm()
+                                    } catch (e: Throwable) {
+                                        Log.e("ScanSmsScreen", "Crash opening pre_confirm", e)
+                                        Toast.makeText(context, "خطا در باز کردن صفحه", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onLongClick = {
+                                    rawSmsDialogText = item.rawText
+                                }
                             )
                         }
                     }
 
-                    itemsIndexed(state.scannedList, key = { index, it -> "${it.id}_$index" }) { _, item ->
-                        val matchingTransfer = state.detectedTransfers.find {
-                            it.withdrawalItem.id == item.id || it.depositItem.id == item.id
-                        }
-                        ScannedSmsCard(
-                            item = item,
-                            matchingTransfer = matchingTransfer,
-                            onReconcileClick = { accId -> onNavigateToReconciliation(accId) },
-                            onAddClick = {
-                                try {
-                                    if (matchingTransfer != null && !matchingTransfer.isRegistered) {
-                                        ScanSmsDataHolder.detectedTransfer = matchingTransfer
-                                        ScanSmsDataHolder.openAsTransfer = true
-                                    } else {
-                                        ScanSmsDataHolder.detectedTransfer = null
-                                        ScanSmsDataHolder.openAsTransfer = false
-                                    }
-                                    sharedScanViewModel.setPendingScanItem(item)
-                                    ScanSmsDataHolder.selectedItem = item
-                                    onNavigateToPreConfirm()
-                                } catch (e: Throwable) {
-                                    Log.e("ScanSmsScreen", "Crash opening pre_confirm", e)
-                                    Toast.makeText(context, "خطا در باز کردن صفحه", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            onLongClick = {
-                                rawSmsDialogText = item.rawText
+                    if (registeredItems.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = if (unregisteredItems.isNotEmpty()) 6.dp else 0.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "پیامک‌های ثبت‌شده (${registeredItems.size})".toPersianDigits(),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                        )
+                        }
+
+                        itemsIndexed(registeredItems, key = { index, it -> "reg_${it.id}_$index" }) { _, item ->
+                            val matchingTransfer = state.detectedTransfers.find {
+                                it.withdrawalItem.id == item.id || it.depositItem.id == item.id
+                            }
+                            ScannedSmsCard(
+                                item = item,
+                                matchingTransfer = matchingTransfer,
+                                onReconcileClick = { accId -> onNavigateToReconciliation(accId) },
+                                onAddClick = {},
+                                onLongClick = {
+                                    rawSmsDialogText = item.rawText
+                                }
+                            )
+                        }
                     }
                 }
             }

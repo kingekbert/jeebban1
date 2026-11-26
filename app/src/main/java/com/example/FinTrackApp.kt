@@ -1,6 +1,9 @@
 package com.example
 
 import android.app.Application
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.example.data.local.SeedData
 import com.example.di.AppModule
 import kotlinx.coroutines.CoroutineScope
@@ -15,6 +18,19 @@ class FinTrackApp : Application() {
     override fun onCreate() {
         super.onCreate()
         appModule = AppModule(this)
+
+        // Observe whole-process foreground/background lifecycle for App Lock
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) {
+                    appModule.appLockRepository.onAppForegrounded()
+                }
+
+                override fun onStop(owner: LifecycleOwner) {
+                    appModule.appLockRepository.onAppBackgrounded()
+                }
+            }
+        )
 
         // Seed default categories and account on first launch if database is empty
         CoroutineScope(Dispatchers.IO).launch {

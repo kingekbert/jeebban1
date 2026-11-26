@@ -38,12 +38,14 @@ data class PreConfirmUiState(
     val bankName: String? = null,
     val accountIdent: String? = null,
     val smsHash: String = "",
+    val rawSmsText: String = "",
     val note: String = "",
     val selectedAccountId: Long? = null,
     val selectedCategoryId: Long? = null,
     val accounts: List<AccountEntity> = emptyList(),
     val categories: List<CategoryEntity> = emptyList(),
     val errorMessage: String? = null,
+    val isSaving: Boolean = false,
     val isSavedSuccess: Boolean = false,
     // Group Expense (Dong)
     val isGroupExpenseEnabled: Boolean = false,
@@ -117,6 +119,7 @@ class PreConfirmViewModel(
                 bankName = finalBankName?.ifBlank { null },
                 accountIdent = finalAccountIdent?.ifBlank { null },
                 smsHash = effectiveSmsHash,
+                rawSmsText = targetItem.rawText,
                 note = effectiveNote,
                 isGroupExpenseEnabled = false,
                 groupShares = emptyList(),
@@ -424,6 +427,10 @@ class PreConfirmViewModel(
 
     fun saveTransaction() {
         val currentState = _uiState.value
+        if (currentState.isSaving || currentState.isSavedSuccess) {
+            return
+        }
+
         val amt = currentState.amount
         val accId = currentState.selectedAccountId
         val toAccId = currentState.selectedToAccountId
@@ -448,6 +455,8 @@ class PreConfirmViewModel(
                 return
             }
 
+            _uiState.update { it.copy(isSaving = true, errorMessage = null) }
+
             viewModelScope.launch {
                 try {
                     val transferTx = TransactionEntity(
@@ -459,15 +468,14 @@ class PreConfirmViewModel(
                         note = currentState.note.ifBlank { "انتقال بین حساب‌ها" },
                         smsHash = currentState.smsHash.ifBlank { null }
                     )
-                    addTransactionUseCase(transferTx)
 
-                    if (currentState.transferFeeAmount > 0L) {
+                    val feeTx = if (currentState.transferFeeAmount > 0L) {
                         val allCats = try { categoryRepository.allCategories.first() } catch (e: Exception) { emptyList() }
                         val feeCatId = allCats.find {
                             it.name.contains("کارمزد") || it.name.contains("خدمات")
                         }?.id ?: allCats.firstOrNull()?.id
 
-                        val feeTx = TransactionEntity(
+                        TransactionEntity(
                             type = TransactionType.EXPENSE,
                             amount = currentState.transferFeeAmount,
                             accountId = accId,
@@ -476,13 +484,44 @@ class PreConfirmViewModel(
                             note = "کارمزد انتقال بین حساب‌ها",
                             smsHash = if (currentState.smsHash.isNotBlank()) "${currentState.smsHash}_fee" else null
                         )
-                        addTransactionUseCase(feeTx)
+                    } else {
+                        null
                     }
 
-                    recordSnapshotIfPresent(accId, currentState.dateTimestamp, currentState.smsHash)
-                    _uiState.update { it.copy(isSavedSuccess = true) }
+                    val transferResult = addTransactionUseCase.addTransferWithOptionalFee(
+                        transferTransaction = transferTx,
+                        feeTransaction = feeTx
+                    )
+
+                    if (transferResult.isSuccess) {
+                        recordSnapshotIfPresent(accId, currentState.dateTimestamp, currentState.smsHash)
+                        _uiState.update {
+                            it.copy(
+                                isSaving = false,
+                                isSavedSuccess = true,
+                                errorMessage = null
+                            )
+                        }
+                    } else {
+                        val errorText = transferResult.exceptionOrNull()?.localizedMessage
+                            ?: transferResult.exceptionOrNull()?.message
+                            ?: "خطا در ذخیره‌سازی انتقال"
+                        _uiState.update {
+                            it.copy(
+                                isSaving = false,
+                                isSavedSuccess = false,
+                                errorMessage = errorText
+                            )
+                        }
+                    }
                 } catch (e: Exception) {
-                    _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "خطا در ذخیره‌سازی انتقال") }
+                    _uiState.update {
+                        it.copy(
+                            isSaving = false,
+                            isSavedSuccess = false,
+                            errorMessage = e.localizedMessage ?: e.message ?: "خطا در ذخیره‌سازی انتقال"
+                        )
+                    }
                 }
             }
             return
@@ -518,6 +557,8 @@ class PreConfirmViewModel(
             }
         }
 
+        _uiState.update { it.copy(isSaving = true, errorMessage = null) }
+
         viewModelScope.launch {
             try {
                 val transaction = TransactionEntity(
@@ -532,17 +573,37 @@ class PreConfirmViewModel(
 
                 // If Income and Settle Dong is enabled with matched share, settle atomically
                 if (currentState.transactionType == TransactionType.INCOME && currentState.settleDongEnabled && currentState.selectedMatchedDongId != null) {
+                    if (currentState.smsHash.isNotBlank() && addTransactionUseCase.isSmsAlreadyRegistered(currentState.smsHash)) {
+                        _uiState.update {
+                            it.copy(
+                                isSaving = false,
+                                isSavedSuccess = false,
+                                errorMessage = "این پیامک قبلاً ثبت شده است"
+                            )
+                        }
+                        return@launch
+                    }
                     groupExpenseRepository.settleShareWithIncomeTransaction(
                         shareId = currentState.selectedMatchedDongId,
                         incomeTransaction = transaction
                     )
                     recordSnapshotIfPresent(accId, currentState.dateTimestamp, currentState.smsHash)
-                    _uiState.update { it.copy(isSavedSuccess = true) }
+                    _uiState.update { it.copy(isSaving = false, isSavedSuccess = true, errorMessage = null) }
                     return@launch
                 }
 
                 // If Group Expense is enabled for EXPENSE
                 if (currentState.transactionType == TransactionType.EXPENSE && currentState.isGroupExpenseEnabled && currentState.groupShares.isNotEmpty()) {
+                    if (currentState.smsHash.isNotBlank() && addTransactionUseCase.isSmsAlreadyRegistered(currentState.smsHash)) {
+                        _uiState.update {
+                            it.copy(
+                                isSaving = false,
+                                isSavedSuccess = false,
+                                errorMessage = "این پیامک قبلاً ثبت شده است"
+                            )
+                        }
+                        return@launch
+                    }
                     val finalShares = if (currentState.groupShareMode == GroupExpenseShareMode.EQUAL) {
                         recalculateEqualShares(currentState.groupShares, currentState.amount)
                     } else currentState.groupShares
@@ -553,23 +614,31 @@ class PreConfirmViewModel(
                         shares = finalShares.map { it.name to it.amount }
                     )
                     recordSnapshotIfPresent(accId, currentState.dateTimestamp, currentState.smsHash)
-                    _uiState.update { it.copy(isSavedSuccess = true) }
+                    _uiState.update { it.copy(isSaving = false, isSavedSuccess = true, errorMessage = null) }
                     return@launch
                 }
 
-                // Standard transaction registration
+                // Standard transaction registration (atomically guards smsHash inside repository)
                 val res = addTransactionUseCase(transaction)
                 if (res.isSuccess) {
                     recordSnapshotIfPresent(accId, currentState.dateTimestamp, currentState.smsHash)
-                    _uiState.update { it.copy(isSavedSuccess = true) }
+                    _uiState.update { it.copy(isSaving = false, isSavedSuccess = true, errorMessage = null) }
                 } else {
                     _uiState.update {
-                        it.copy(errorMessage = res.exceptionOrNull()?.message ?: "خطا در ثبت تراکنش")
+                        it.copy(
+                            isSaving = false,
+                            isSavedSuccess = false,
+                            errorMessage = res.exceptionOrNull()?.message ?: "خطا در ثبت تراکنش"
+                        )
                     }
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = e.localizedMessage ?: "خطا در ذخیره‌سازی تراکنش")
+                    it.copy(
+                        isSaving = false,
+                        isSavedSuccess = false,
+                        errorMessage = e.localizedMessage ?: "خطا در ذخیره‌سازی تراکنش"
+                    )
                 }
             }
         }
@@ -593,6 +662,9 @@ class PreConfirmViewModel(
 
     fun quickSaveTransaction() {
         val currentState = _uiState.value
+        if (currentState.isSaving || currentState.isSavedSuccess) {
+            return
+        }
         if (currentState.transactionType == TransactionType.TRANSFER) {
             if (currentState.selectedAccountId == null && currentState.accounts.isNotEmpty()) {
                 _uiState.update { it.copy(selectedAccountId = currentState.accounts.first().id) }

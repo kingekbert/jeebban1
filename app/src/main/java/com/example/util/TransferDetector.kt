@@ -126,15 +126,17 @@ object TransferDetector {
                     accounts.find { it.id != finalSrcAcc.id }
                 } else null
 
-                // Check registration status from both items or existing transactions with composite/matching hashes
+                // Check registration status from both items or existing transactions with exact composite hash tokens
+                val wTokens = SmsHashUtil.extractHashTokens(w.smsHash)
+                val dTokens = SmsHashUtil.extractHashTokens(bestDeposit.smsHash)
                 val isRegistered = (w.isRegistered && bestDeposit.isRegistered) ||
                         existingTransactions.any { txItem ->
-                            val tx = txItem.transaction
-                            val txHash = tx.smsHash ?: ""
-                            txHash.isNotBlank() && (
-                                txHash == "${w.smsHash}|${bestDeposit.smsHash}" ||
-                                (txHash.contains(w.smsHash) && txHash.contains(bestDeposit.smsHash))
-                            )
+                            val storedTokens = SmsHashUtil.extractHashTokens(txItem.transaction.smsHash)
+                            storedTokens.isNotEmpty() &&
+                                wTokens.isNotEmpty() &&
+                                dTokens.isNotEmpty() &&
+                                wTokens.any { it in storedTokens } &&
+                                dTokens.any { it in storedTokens }
                         }
 
                 results.add(

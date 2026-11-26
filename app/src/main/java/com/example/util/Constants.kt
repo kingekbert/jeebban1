@@ -13,7 +13,10 @@ object Constants {
     const val KEY_LAST_BACKUP_TIME = "key_last_backup_time"
     const val KEY_BIOMETRIC_ENABLED = "key_biometric_enabled"
     const val KEY_SECURE_SCREEN_ENABLED = "key_secure_screen_enabled"
+    const val KEY_LOCK_GRACE_MS = "key_lock_grace_ms"
+    const val KEY_LAST_BACKGROUND_AT = "key_last_background_at"
 
     // Default Values
     const val DEFAULT_ACCOUNT_ID = 1L
+    const val DEFAULT_LOCK_GRACE_MS = 30_000L
 }

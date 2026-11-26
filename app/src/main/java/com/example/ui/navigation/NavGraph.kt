@@ -140,7 +140,14 @@ fun NavGraph(
                     accountIdentifier = if (parsed.accountIdentifier.isNullOrBlank()) (senderAccount?.cardNumber?.takeLast(4) ?: "") else parsed.accountIdentifier
                 )
                 val smsDate = parsed.date ?: System.currentTimeMillis()
-                val hash = com.example.util.SmsHashUtil.calculateHash(sharedSender, parsed.amount, smsDate, initialSharedSmsText)
+                val hash = com.example.util.SmsHashUtil.calculateHash(
+                    sender = sharedSender,
+                    amount = parsed.amount,
+                    date = smsDate,
+                    text = initialSharedSmsText,
+                    transactionType = parsed.transactionType,
+                    accountIdentifier = effectiveParsed.accountIdentifier
+                )
                 val item = com.example.ui.screens.scan_sms.ScannedSmsItem(
                     id = hash,
                     parsedSms = effectiveParsed,
@@ -804,6 +811,7 @@ fun NavGraph(
                 val viewModel: SettingsViewModel = viewModel(
                     factory = SettingsViewModel.Factory(
                         settingsRepository = app.appModule.settingsRepository,
+                        appLockRepository = app.appModule.appLockRepository,
                         backupManager = app.appModule.backupManager,
                         accountRepository = app.appModule.accountRepository,
                         onThemeChanged = onThemeChanged

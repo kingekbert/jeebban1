@@ -148,6 +148,11 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
         val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
         scope.launch {
             try {
+                if (appModule.transactionRepository.isSmsHashRegistered(smsHash)) {
+                    handleDuplicateAndFinish(smsHash)
+                    return@launch
+                }
+
                 val allAccounts = appModule.accountRepository.getAllAccountsList()
                 val matchedAccount = allAccounts.find { acc ->
                     (accountIdent.isNotBlank() && (
@@ -173,6 +178,7 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
                 )
 
                 var isSuccess = false
+                var isDuplicate = false
                 if (txType == TransactionType.INCOME) {
                     val matchingShares = try {
                         appModule.groupExpenseRepository.findMatchingOpenShares(amount)
@@ -187,14 +193,25 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
                                 incomeTransaction = transaction
                             )
                             isSuccess = true
+                        } catch (e: com.example.data.repository.DuplicateSmsTransactionException) {
+                            isDuplicate = true
                         } catch (e: Exception) {
                             e.printStackTrace()
                         }
                     }
                 }
 
+                if (isDuplicate) {
+                    handleDuplicateAndFinish(smsHash)
+                    return@launch
+                }
+
                 if (!isSuccess) {
                     val result = appModule.addTransactionUseCase(transaction)
+                    if (result.exceptionOrNull() is com.example.data.repository.DuplicateSmsTransactionException) {
+                        handleDuplicateAndFinish(smsHash)
+                        return@launch
+                    }
                     isSuccess = result.isSuccess
                 }
 
@@ -238,12 +255,33 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
                         ).show()
                     }
                 }
+            } catch (e: com.example.data.repository.DuplicateSmsTransactionException) {
+                handleDuplicateAndFinish(smsHash)
             } catch (e: Exception) {
                 e.printStackTrace()
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     Toast.makeText(this@WidgetCategoryPickerActivity, "خطا: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    private suspend fun handleDuplicateAndFinish(smsHash: String) {
+        val remaining = WidgetDataStore.removeItem(this@WidgetCategoryPickerActivity, smsHash)
+        val curIdx = WidgetStatusHelper.getCurrentTransactionIndex(this@WidgetCategoryPickerActivity)
+        if (curIdx >= remaining.size) {
+            WidgetStatusHelper.setCurrentTransactionIndex(this@WidgetCategoryPickerActivity, maxOf(0, remaining.size - 1))
+        }
+        WidgetStatusHelper.saveScanResult(this@WidgetCategoryPickerActivity, remaining.size)
+        WidgetStatusHelper.updateAllWidgets(this@WidgetCategoryPickerActivity)
+
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            Toast.makeText(
+                this@WidgetCategoryPickerActivity,
+                "این پیامک قبلاً ثبت شده است",
+                Toast.LENGTH_SHORT
+            ).show()
+            finish()
         }
     }
 

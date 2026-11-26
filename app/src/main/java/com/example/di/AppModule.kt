@@ -29,11 +29,15 @@ class AppModule(private val context: Context) {
     }
 
     val transactionRepository: TransactionRepository by lazy {
-        TransactionRepository(database.transactionDao())
+        TransactionRepository(database.transactionDao(), database)
     }
 
     val settingsRepository: SettingsRepository by lazy {
         SettingsRepository(preferences)
+    }
+
+    val appLockRepository: com.example.data.repository.AppLockRepository by lazy {
+        com.example.data.repository.AppLockRepository(preferences)
     }
 
     val backupManager: BackupManager by lazy {
@@ -85,7 +89,12 @@ class AppModule(private val context: Context) {
     }
 
     val addTransactionUseCase: AddTransactionUseCase by lazy {
-        AddTransactionUseCase(transactionRepository, categoryRepository, debtRepository)
+        AddTransactionUseCase(
+            transactionRepository = transactionRepository,
+            categoryRepository = categoryRepository,
+            debtRepository = debtRepository,
+            groupExpenseRepository = groupExpenseRepository
+        )
     }
 
     val reconciliationRepository: com.example.data.repository.ReconciliationRepository by lazy {

@@ -629,7 +629,7 @@ fun AddTransactionScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
-                enabled = !state.isLoading,
+                enabled = !state.isLoading && !state.isSuccess,
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = buttonColor)
             ) {

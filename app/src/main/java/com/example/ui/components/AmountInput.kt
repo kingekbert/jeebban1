@@ -101,7 +101,8 @@ fun AmountInput(
     onAmountChange: (Long) -> Unit,
     color: Color = MaterialTheme.colorScheme.primary,
     autoFocus: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    currencyLabel: String = "ریال"
 ) {
     var rawText by remember(amount) {
         mutableStateOf(if (amount == 0L) "" else amount.toString())
@@ -148,7 +149,7 @@ fun AmountInput(
             },
             suffix = {
                 Text(
-                    text = "ریال",
+                    text = currencyLabel,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = color
@@ -163,18 +164,13 @@ fun AmountInput(
             )
         )
 
-        // نمایش زنده مبلغ به حروف با واحد «تومان»
+        // نمایش زنده مبلغ به حروف مطابق با واحد واقعی فیلد (ریال)
         AnimatedVisibility(
-            visible = amount > 0L,
+            visible = amount != 0L,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            val amountToman = amount / 10L
-            val wordsText = if (amountToman > 0L) {
-                NumberToWords.convert(amountToman, suffix = "تومان")
-            } else {
-                "${AmountFormatter.format(amount, includeCurrency = false)} ریال (کمتر از ۱ تومان)"
-            }
+            val wordsText = NumberToWords.convert(amount = amount, suffix = currencyLabel)
 
             Surface(
                 modifier = Modifier

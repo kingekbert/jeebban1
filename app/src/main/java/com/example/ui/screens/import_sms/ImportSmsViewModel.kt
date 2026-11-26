@@ -263,6 +263,23 @@ class ImportSmsViewModel(
         }
 
         viewModelScope.launch {
+            val selectedAccount = currentState.accounts.find { it.id == accId }
+            val effectiveAccountIdent = currentState.parsedResult?.accountIdentifier?.takeIf { it.isNotBlank() }
+                ?: selectedAccount?.cardNumber?.takeLast(4)
+                ?: ""
+            val smsHash = if (currentState.smsText.isNotBlank()) {
+                com.example.util.SmsHashUtil.calculateHash(
+                    sender = SharedSmsHolder.sharedSender,
+                    amount = currentState.amount,
+                    date = currentState.dateTimestamp,
+                    text = currentState.smsText,
+                    transactionType = currentState.transactionType,
+                    accountIdentifier = effectiveAccountIdent
+                )
+            } else {
+                null
+            }
+
             val transaction = TransactionEntity(
                 type = currentState.transactionType,
                 amount = currentState.amount,
@@ -270,7 +287,8 @@ class ImportSmsViewModel(
                 toAccountId = null,
                 categoryId = catId,
                 date = currentState.dateTimestamp,
-                note = currentState.note.ifBlank { null }
+                note = currentState.note.ifBlank { null },
+                smsHash = smsHash
             )
 
             val res = addTransactionUseCase(transaction)

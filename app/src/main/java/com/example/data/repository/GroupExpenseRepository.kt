@@ -2,19 +2,55 @@ package com.example.data.repository
 
 import androidx.room.withTransaction
 import com.example.data.local.FinTrackDatabase
+import com.example.data.local.dao.GroupExpenseDao
+import com.example.data.local.dao.TransactionDao
 import com.example.data.local.entity.GroupExpenseEntity
 import com.example.data.local.entity.GroupExpenseShareEntity
 import com.example.data.local.entity.GroupExpenseShareMode
 import com.example.data.local.entity.TransactionEntity
 import com.example.data.local.entity.TransactionType
 import com.example.data.local.relation.GroupExpenseWithShares
+import com.example.util.SmsHashUtil
 import kotlinx.coroutines.flow.Flow
 
-class GroupExpenseRepository(
-    private val database: FinTrackDatabase
+data class GroupExpenseInsertResult(
+    val transactionId: Long,
+    val groupExpenseId: Long,
+    val shareIds: List<Long>
+)
+
+class GroupExpenseRepository private constructor(
+    private val groupExpenseDao: GroupExpenseDao,
+    private val transactionDao: TransactionDao,
+    private val database: FinTrackDatabase?,
+    private val transactionRunner: (suspend (suspend () -> Any?) -> Any?)?
 ) {
-    private val groupExpenseDao = database.groupExpenseDao()
-    private val transactionDao = database.transactionDao()
+    constructor(database: FinTrackDatabase) : this(
+        groupExpenseDao = database.groupExpenseDao(),
+        transactionDao = database.transactionDao(),
+        database = database,
+        transactionRunner = null
+    )
+
+    internal constructor(
+        groupExpenseDao: GroupExpenseDao,
+        transactionDao: TransactionDao,
+        transactionRunner: suspend (suspend () -> Any?) -> Any?
+    ) : this(
+        groupExpenseDao = groupExpenseDao,
+        transactionDao = transactionDao,
+        database = null,
+        transactionRunner = transactionRunner
+    )
+
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun <T> runAtomic(block: suspend () -> T): T {
+        return when {
+            transactionRunner != null -> transactionRunner.invoke { block() } as T
+            database != null -> database.withTransaction { block() }
+            else -> throw IllegalStateException("تراکنش اتمیک پایگاه داده پیکربندی نشده است")
+        }
+    }
 
     val allGroupExpenses: Flow<List<GroupExpenseWithShares>> = groupExpenseDao.getAllWithShares()
     val recentPersonNames: Flow<List<String>> = groupExpenseDao.getRecentPersonNames()
@@ -70,8 +106,17 @@ data class MatchedShareResult(
         shareId: Long,
         incomeTransaction: TransactionEntity
     ): Long {
-        return database.withTransaction {
+        return runAtomic {
+            val smsHash = incomeTransaction.smsHash
+            if (!smsHash.isNullOrBlank() && !SmsHashUtil.isFeeHash(smsHash)) {
+                if (SmsHashUtil.hasHashConflict(smsHash, transactionDao.getAllSmsHashesList())) {
+                    throw DuplicateSmsTransactionException()
+                }
+            }
             val txId = transactionDao.insert(incomeTransaction)
+            if (txId <= 0L) {
+                throw IllegalStateException("خطا در ثبت تراکنش تسویه دنگ")
+            }
             val share = groupExpenseDao.getShareById(shareId)
             if (share != null) {
                 groupExpenseDao.updateShare(
@@ -85,17 +130,74 @@ data class MatchedShareResult(
         }
     }
 
+    /**
+     * Atomically persists the main expense transaction, its [GroupExpenseEntity], and all
+     * associated [GroupExpenseShareEntity] records inside a single Room database transaction.
+     * If any step fails or returns an invalid row ID, the entire transaction is rolled back.
+     */
+    suspend fun saveExpenseWithSharesAtomic(
+        expenseTransaction: TransactionEntity,
+        shareMode: GroupExpenseShareMode,
+        shares: List<Pair<String, Long>>
+    ): GroupExpenseInsertResult {
+        if (expenseTransaction.type != TransactionType.EXPENSE) {
+            throw IllegalArgumentException("نوع تراکنش هزینه مشترک باید هزینه باشد")
+        }
+        if (expenseTransaction.amount <= 0L) {
+            throw IllegalArgumentException("مبلغ هزینه مشترک باید بزرگتر از صفر باشد")
+        }
+        if (expenseTransaction.accountId == null) {
+            throw IllegalArgumentException("حساب انتخاب نشده است")
+        }
+        if (shares.isEmpty()) {
+            throw IllegalArgumentException("حداقل یک سهم برای هزینه مشترک لازم است")
+        }
+        if (shares.any { it.first.isBlank() }) {
+            throw IllegalArgumentException("نام تمام افراد در هزینه مشترک باید مشخص باشد")
+        }
+        if (shares.any { it.second < 0L }) {
+            throw IllegalArgumentException("مبلغ سهم افراد نمی‌تواند منفی باشد")
+        }
+        if (shares.sumOf { it.second } > expenseTransaction.amount) {
+            throw IllegalArgumentException("مجموع سهم دوستان نمی‌تواند بیشتر از مبلغ کل هزینه باشد")
+        }
+
+        return runAtomic {
+            val smsHash = expenseTransaction.smsHash
+            if (!smsHash.isNullOrBlank() && !SmsHashUtil.isFeeHash(smsHash)) {
+                if (SmsHashUtil.hasHashConflict(smsHash, transactionDao.getAllSmsHashesList())) {
+                    throw DuplicateSmsTransactionException()
+                }
+            }
+
+            val txId = transactionDao.insert(expenseTransaction)
+            if (txId <= 0L) {
+                throw IllegalStateException("خطا در ثبت تراکنش اصلی هزینه مشترک")
+            }
+
+            val (groupExpenseId, shareIds) = insertGroupExpenseAndSharesInternal(
+                transactionId = txId,
+                shareMode = shareMode,
+                shares = shares
+            )
+
+            GroupExpenseInsertResult(
+                transactionId = txId,
+                groupExpenseId = groupExpenseId,
+                shareIds = shareIds
+            )
+        }
+    }
+
     suspend fun saveExpenseWithShares(
         expenseTransaction: TransactionEntity,
         shareMode: GroupExpenseShareMode,
         shares: List<Pair<String, Long>>
-    ): Long {
-        return database.withTransaction {
-            val txId = transactionDao.insert(expenseTransaction)
-            saveGroupExpense(txId, shareMode, shares)
-            txId
-        }
-    }
+    ): Long = saveExpenseWithSharesAtomic(
+        expenseTransaction = expenseTransaction,
+        shareMode = shareMode,
+        shares = shares
+    ).transactionId
 
     suspend fun saveGroupExpense(
         transactionId: Long,
@@ -104,29 +206,50 @@ data class MatchedShareResult(
     ) {
         if (shares.isEmpty()) return
 
-        database.withTransaction {
-            // Remove existing if any (in case of edit)
-            groupExpenseDao.deleteByTransactionId(transactionId)
-
-            val groupExpenseId = groupExpenseDao.insertGroupExpense(
-                GroupExpenseEntity(
-                    transactionId = transactionId,
-                    shareMode = shareMode,
-                    createdAt = System.currentTimeMillis()
-                )
+        runAtomic {
+            insertGroupExpenseAndSharesInternal(
+                transactionId = transactionId,
+                shareMode = shareMode,
+                shares = shares
             )
-
-            val shareEntities = shares.map { (name, amount) ->
-                GroupExpenseShareEntity(
-                    groupExpenseId = groupExpenseId,
-                    personName = name.trim(),
-                    amount = amount,
-                    isSettled = false,
-                    settledTransactionId = null
-                )
-            }
-            groupExpenseDao.insertShares(shareEntities)
         }
+    }
+
+    private suspend fun insertGroupExpenseAndSharesInternal(
+        transactionId: Long,
+        shareMode: GroupExpenseShareMode,
+        shares: List<Pair<String, Long>>
+    ): Pair<Long, List<Long>> {
+        // Remove existing if any (in case of edit)
+        groupExpenseDao.deleteByTransactionId(transactionId)
+
+        val groupExpenseId = groupExpenseDao.insertGroupExpense(
+            GroupExpenseEntity(
+                transactionId = transactionId,
+                shareMode = shareMode,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+        if (groupExpenseId <= 0L) {
+            throw IllegalStateException("خطا در ثبت اطلاعات هزینه مشترک")
+        }
+
+        val shareEntities = shares.map { (name, amount) ->
+            GroupExpenseShareEntity(
+                groupExpenseId = groupExpenseId,
+                personName = name.trim(),
+                amount = amount,
+                isSettled = false,
+                settledTransactionId = null
+            )
+        }
+
+        val insertedShareIds = groupExpenseDao.insertShares(shareEntities)
+        if (insertedShareIds.size != shareEntities.size || insertedShareIds.any { it <= 0L }) {
+            throw IllegalStateException("خطا در ثبت سهم‌های هزینه مشترک")
+        }
+
+        return groupExpenseId to insertedShareIds
     }
 
     suspend fun settleShare(
@@ -135,8 +258,8 @@ data class MatchedShareResult(
         categoryId: Long? = null,
         customNote: String? = null
     ) {
-        database.withTransaction {
-            val share = groupExpenseDao.getShareById(shareId) ?: return@withTransaction
+        runAtomic {
+            val share = groupExpenseDao.getShareById(shareId) ?: return@runAtomic
             var createdIncomeId: Long? = null
 
             if (incomeAccountId != null) {
@@ -163,8 +286,8 @@ data class MatchedShareResult(
     }
 
     suspend fun unsettleShare(shareId: Long) {
-        database.withTransaction {
-            val share = groupExpenseDao.getShareById(shareId) ?: return@withTransaction
+        runAtomic {
+            val share = groupExpenseDao.getShareById(shareId) ?: return@runAtomic
             val incomeTxId = share.settledTransactionId
             if (incomeTxId != null) {
                 transactionDao.deleteById(incomeTxId)
@@ -187,7 +310,7 @@ data class MatchedShareResult(
         customNote: String? = null
     ) {
         if (shareIds.isEmpty()) return
-        database.withTransaction {
+        runAtomic {
             var createdIncomeId: Long? = null
             if (incomeAccountId != null && totalAmount > 0) {
                 val now = System.currentTimeMillis()
@@ -222,11 +345,11 @@ data class MatchedShareResult(
         categoryId: Long? = null,
         customNote: String? = null
     ) {
-        database.withTransaction {
-            val share = groupExpenseDao.getShareById(shareId) ?: return@withTransaction
+        runAtomic {
+            val share = groupExpenseDao.getShareById(shareId) ?: return@runAtomic
             if (settleAmount >= share.amount) {
                 settleShare(shareId, incomeAccountId, categoryId, customNote)
-                return@withTransaction
+                return@runAtomic
             }
 
             var createdIncomeId: Long? = null
@@ -267,7 +390,7 @@ data class MatchedShareResult(
         categoryId: Long? = null,
         customNote: String? = null
     ) {
-        database.withTransaction {
+        runAtomic {
             val allExpenses = groupExpenseDao.getAllWithSharesList()
             val openSharesWithDate = allExpenses.flatMap { exp ->
                 val date = exp.transaction?.date ?: exp.groupExpense.createdAt

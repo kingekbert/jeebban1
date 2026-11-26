@@ -102,6 +102,9 @@ class TransferViewModel(
 
     fun executeTransfer() {
         val state = _uiState.value
+        if (state.isLoading || state.isSuccess) {
+            return
+        }
         if (state.amount <= 0L) {
             _uiState.value = state.copy(errorMessage = "لطفاً مبلغ معتبری وارد کنید")
             return
@@ -119,33 +122,49 @@ class TransferViewModel(
             return
         }
 
+        _uiState.value = state.copy(isLoading = true, errorMessage = null)
+
         viewModelScope.launch {
-            _uiState.value = state.copy(isLoading = true, errorMessage = null)
+            try {
+                val finalTimestamp = com.example.util.DateFormatter.combineDateAndTime(
+                    state.dateTimestamp,
+                    state.selectedHour,
+                    state.selectedMinute
+                )
 
-            val finalTimestamp = com.example.util.DateFormatter.combineDateAndTime(
-                state.dateTimestamp,
-                state.selectedHour,
-                state.selectedMinute
-            )
+                val transferTransaction = TransactionEntity(
+                    type = TransactionType.TRANSFER,
+                    amount = state.amount,
+                    accountId = state.selectedFromAccount.id,
+                    toAccountId = state.selectedToAccount.id,
+                    categoryId = null,
+                    date = finalTimestamp,
+                    note = state.note.ifBlank { "انتقال بین حساب‌ها" }
+                )
 
-            val transferTransaction = TransactionEntity(
-                type = TransactionType.TRANSFER,
-                amount = state.amount,
-                accountId = state.selectedFromAccount.id,
-                toAccountId = state.selectedToAccount.id,
-                categoryId = null,
-                date = finalTimestamp,
-                note = state.note.ifBlank { "انتقال بین حساب‌ها" }
-            )
-
-            val result = addTransactionUseCase(transferTransaction)
-            result.onSuccess {
-                settingsRepository.lastAccountId = state.selectedFromAccount.id
-                _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
-            }.onFailure { ex ->
+                val result = addTransactionUseCase.addTransferWithOptionalFee(
+                    transferTransaction = transferTransaction,
+                    feeTransaction = null
+                )
+                result.onSuccess {
+                    settingsRepository.lastAccountId = state.selectedFromAccount.id
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isSuccess = true,
+                        errorMessage = null
+                    )
+                }.onFailure { ex ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isSuccess = false,
+                        errorMessage = ex.localizedMessage ?: ex.message ?: "خطا در ثبت انتقال"
+                    )
+                }
+            } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    errorMessage = ex.message ?: "خطا در ثبت انتقال"
+                    isSuccess = false,
+                    errorMessage = e.localizedMessage ?: e.message ?: "خطا در ثبت انتقال"
                 )
             }
         }

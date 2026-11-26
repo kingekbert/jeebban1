@@ -40,4 +40,7 @@ interface AccountSmsSenderDao {
 
     @Query("DELETE FROM account_sms_senders WHERE accountId = :accountId")
     suspend fun deleteAllForAccount(accountId: Long)
+
+    @Query("DELETE FROM account_sms_senders")
+    suspend fun deleteAll()
 }

@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.backup.BackupManager
 import com.example.data.local.entity.AccountEntity
 import com.example.data.repository.AccountRepository
+import com.example.data.repository.AppLockRepository
 import com.example.data.repository.SettingsRepository
+import com.example.util.Constants
 import com.example.util.DateFormatter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,6 +24,7 @@ data class SettingsUiState(
     val lastBackupTimeFormatted: String = "هرگز",
     val isBiometricEnabled: Boolean = false,
     val isSecureScreenEnabled: Boolean = false,
+    val lockGraceMs: Long = Constants.DEFAULT_LOCK_GRACE_MS,
     val isLoading: Boolean = false,
     val userMessage: String? = null,
     val isErrorMessage: Boolean = false,
@@ -31,6 +34,7 @@ data class SettingsUiState(
 
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
+    private val appLockRepository: AppLockRepository,
     private val backupManager: BackupManager,
     private val accountRepository: AccountRepository,
     private val onThemeChanged: (String) -> Unit = {}
@@ -48,28 +52,51 @@ class SettingsViewModel(
             themeMode = settingsRepository.themeMode,
             lastBackupTime = settingsRepository.lastBackupTime,
             lastBackupTimeFormatted = DateFormatter.formatDateTime(settingsRepository.lastBackupTime),
-            isBiometricEnabled = settingsRepository.isBiometricEnabled,
-            isSecureScreenEnabled = settingsRepository.isSecureScreenEnabled
+            isBiometricEnabled = appLockRepository.lockEnabled.value,
+            isSecureScreenEnabled = appLockRepository.secureScreenEnabled.value,
+            lockGraceMs = appLockRepository.lockGraceMs.value
         )
     )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     fun setBiometricEnabled(enabled: Boolean) {
-        settingsRepository.isBiometricEnabled = enabled
+        appLockRepository.setLockEnabled(enabled)
         _uiState.update {
             it.copy(
                 isBiometricEnabled = enabled,
-                userMessage = if (enabled) "قفل امنیتی فعال شد" else "قفل امنیتی غیرفعال شد"
+                userMessage = if (enabled) "قفل امنیتی برنامه فعال شد" else "قفل امنیتی برنامه غیرفعال شد",
+                isErrorMessage = false
+            )
+        }
+    }
+
+    fun setLockGraceMs(graceMs: Long) {
+        appLockRepository.setLockGraceMs(graceMs)
+        _uiState.update {
+            it.copy(
+                lockGraceMs = graceMs,
+                userMessage = "مهلت قفل مجدد ذخیره شد",
+                isErrorMessage = false
             )
         }
     }
 
     fun setSecureScreenEnabled(enabled: Boolean) {
-        settingsRepository.isSecureScreenEnabled = enabled
+        appLockRepository.setSecureScreenEnabled(enabled)
         _uiState.update {
             it.copy(
                 isSecureScreenEnabled = enabled,
-                userMessage = if (enabled) "حفاظت در برنامه‌های اخیر فعال شد" else "حفاظت در برنامه‌های اخیر غیرفعال شد"
+                userMessage = if (enabled) "حفاظت صفحه در برنامه‌های اخیر فعال شد" else "حفاظت صفحه در برنامه‌های اخیر غیرفعال شد",
+                isErrorMessage = false
+            )
+        }
+    }
+
+    fun showSecurityError(message: String) {
+        _uiState.update {
+            it.copy(
+                userMessage = message,
+                isErrorMessage = true
             )
         }
     }
@@ -183,27 +210,30 @@ class SettingsViewModel(
     }
 
     private fun validateAndPrepareRestore(jsonString: String) {
-        val isValid = backupManager.validateBackupJson(jsonString)
-        if (!isValid) {
-            _uiState.update {
-                it.copy(
-                    userMessage = "فایل پشتیبان نامعتبر است یا ساختار جیب‌بان را ندارد.",
-                    isErrorMessage = true
-                )
+        when (val validation = backupManager.validateBackupDetailed(jsonString)) {
+            is com.example.data.backup.BackupValidationResult.Invalid -> {
+                _uiState.update {
+                    it.copy(
+                        userMessage = validation.reason,
+                        isErrorMessage = true
+                    )
+                }
             }
-            return
-        }
-
-        _uiState.update {
-            it.copy(
-                pendingRestoreJson = jsonString,
-                showRestoreDialog = true
-            )
+            is com.example.data.backup.BackupValidationResult.Valid -> {
+                _uiState.update {
+                    it.copy(
+                        pendingRestoreJson = jsonString,
+                        showRestoreDialog = true
+                    )
+                }
+            }
         }
     }
 
     fun confirmRestore() {
-        val jsonString = _uiState.value.pendingRestoreJson ?: return
+        val currentState = _uiState.value
+        if (currentState.isLoading) return
+        val jsonString = currentState.pendingRestoreJson ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, showRestoreDialog = false) }
 
@@ -211,30 +241,31 @@ class SettingsViewModel(
                 // 1. Auto backup current state before restoring
                 backupManager.createBackupJson()
 
-                // 2. Perform restoration
-                val success = backupManager.restoreBackupJson(jsonString)
-                val now = System.currentTimeMillis()
-
-                if (success) {
-                    settingsRepository.lastBackupTime = now
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            lastBackupTime = now,
-                            lastBackupTimeFormatted = DateFormatter.formatDateTime(now),
-                            pendingRestoreJson = null,
-                            userMessage = "اطلاعات با موفقیت بازیابی شدند (پشتیبان‌گیری خودکار انجام شد)",
-                            isErrorMessage = false
-                        )
+                // 2. Perform validated atomic restoration
+                when (val restoreResult = backupManager.restoreBackupDetailed(jsonString)) {
+                    is com.example.data.backup.BackupRestoreResult.Success -> {
+                        val now = System.currentTimeMillis()
+                        settingsRepository.lastBackupTime = now
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                lastBackupTime = now,
+                                lastBackupTimeFormatted = DateFormatter.formatDateTime(now),
+                                pendingRestoreJson = null,
+                                userMessage = "اطلاعات با موفقیت بازیابی شدند (پشتیبان‌گیری خودکار انجام شد)",
+                                isErrorMessage = false
+                            )
+                        }
                     }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            pendingRestoreJson = null,
-                            userMessage = "خطا در بازیابی اطلاعات",
-                            isErrorMessage = true
-                        )
+                    is com.example.data.backup.BackupRestoreResult.Failure -> {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                pendingRestoreJson = null,
+                                userMessage = restoreResult.reason,
+                                isErrorMessage = true
+                            )
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -265,13 +296,20 @@ class SettingsViewModel(
 
     class Factory(
         private val settingsRepository: SettingsRepository,
+        private val appLockRepository: AppLockRepository,
         private val backupManager: BackupManager,
         private val accountRepository: AccountRepository,
         private val onThemeChanged: (String) -> Unit
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return SettingsViewModel(settingsRepository, backupManager, accountRepository, onThemeChanged) as T
+            return SettingsViewModel(
+                settingsRepository = settingsRepository,
+                appLockRepository = appLockRepository,
+                backupManager = backupManager,
+                accountRepository = accountRepository,
+                onThemeChanged = onThemeChanged
+            ) as T
         }
     }
 }

@@ -88,6 +88,8 @@ class ScanSmsViewModel(
                     }
 
                     val scannedResult = mutableListOf<ScannedSmsItem>()
+                    val consumedManualTxIds = mutableSetOf<Long>()
+                    val seenHashes = mutableSetOf<String>()
 
                     val uri = Uri.parse("content://sms/inbox")
                     val projection = arrayOf("_id", "address", "body", "date")
@@ -142,59 +144,39 @@ class ScanSmsViewModel(
                                     accountIdentifier = if (parsed.accountIdentifier.isNullOrBlank()) (senderAccount?.cardNumber?.takeLast(4) ?: "") else parsed.accountIdentifier
                                 )
 
-                                // Calculate SHA-256 hash (sender + amount + smsDate + normalized text)
-                                val hash = com.example.util.SmsHashUtil.calculateHash(sender, amt, smsDate, body)
-                                val legacyHash = "${amt}_${smsDate}_${effectiveAccountIdent}"
+                                // Calculate canonical v2 SHA-256 hash including transactionType & accountIdentifier
+                                val hash = com.example.util.SmsHashUtil.calculateHash(
+                                    sender = sender,
+                                    amount = amt,
+                                    date = smsDate,
+                                    text = body,
+                                    transactionType = txType,
+                                    accountIdentifier = effectiveAccountIdent
+                                )
 
-                                val smsJalali = JalaliDate.fromTimestamp(smsDate)
+                                // Avoid duplicate within current scan list before consuming any manual match
+                                if (!seenHashes.add(hash)) continue
 
-                                // Accurate check for registered transaction based on:
-                                // 1. Exact hash
-                                // 2. Amount match
-                                // 3. Same day Jalali
-                                // 4. Account matching (Sender account prioritized)
-                                val isRegistered = existingTransactions.any { txItem ->
-                                    val tx = txItem.transaction
+                                val legacyHashes = setOf(
+                                    com.example.util.SmsHashUtil.calculateLegacyV1Hash(sender, amt, smsDate, body),
+                                    com.example.util.SmsHashUtil.calculateLegacySimpleHash(amt, smsDate, effectiveAccountIdent)
+                                )
 
-                                    // Exact smsHash match (supporting both new SHA-256 and legacy hashes)
-                                    if (!tx.smsHash.isNullOrBlank() && (tx.smsHash == hash || tx.smsHash == legacyHash)) {
-                                        return@any true
-                                    }
-
-                                    // 1. Amount match
-                                    if (tx.amount != amt) return@any false
-
-                                    // 2. Same day in Jalali calendar
-                                    val txJalali = JalaliDate.fromTimestamp(tx.date)
-                                    val sameDay = txJalali.year == smsJalali.year &&
-                                            txJalali.month == smsJalali.month &&
-                                            txJalali.day == smsJalali.day
-                                    if (!sameDay) return@any false
-
-                                    // 3. Account matching: If sender matches a registered account, check that account directly
-                                    if (senderAccount != null && tx.accountId == senderAccount.id) {
-                                        return@any true
-                                    }
-
-                                    if (effectiveAccountIdent.isNotBlank()) {
-                                        val account = tx.accountId?.let { accountMap[it] }
-                                        val card = account?.cardNumber ?: txItem.accountCardNumber
-                                        val shaba = account?.shabaNumber
-                                        val name = account?.name ?: txItem.accountName
-
-                                        val matchesCard = card != null && (card.contains(effectiveAccountIdent) || effectiveAccountIdent.contains(card.takeLast(4)))
-                                        val matchesShaba = shaba != null && shaba.contains(effectiveAccountIdent)
-                                        val matchesName = name != null && (name.contains(effectiveAccountIdent) || effectiveAccountIdent.contains(name))
-                                        val matchesBank = effectiveBankName.isNotBlank() && name != null && (name.contains(effectiveBankName) || effectiveBankName.contains(name))
-
-                                        matchesCard || matchesShaba || matchesName || matchesBank
-                                    } else {
-                                        true
-                                    }
-                                }
-
-                                // Avoid duplicate within current scan list
-                                if (scannedResult.any { it.smsHash == hash }) continue
+                                val isRegistered = com.example.util.SmsDeduplicator.isSmsRegistered(
+                                    candidate = com.example.util.SmsDeduplicator.SmsCandidate(
+                                        transactionType = txType,
+                                        amount = amt,
+                                        date = smsDate,
+                                        primaryHash = hash,
+                                        legacyHashes = legacyHashes,
+                                        matchedAccountId = senderAccount?.id,
+                                        accountIdent = effectiveAccountIdent,
+                                        bankName = effectiveBankName
+                                    ),
+                                    existingTransactions = existingTransactions,
+                                    accountsById = accountMap,
+                                    consumedManualTxIds = consumedManualTxIds
+                                )
 
                                 var itemBalDiff: Long? = null
                                 var itemMatchedAccId: Long? = null
@@ -248,7 +230,10 @@ class ScanSmsViewModel(
                         scannedResult
                     }
 
-                    Pair(finalItems, transfers)
+                    val sortedItems = sortScannedItems(finalItems)
+                    val sortedTransfers = sortDetectedTransfers(transfers)
+
+                    Pair(sortedItems, sortedTransfers)
                 }
 
                 _uiState.update {
@@ -273,24 +258,29 @@ class ScanSmsViewModel(
 
     fun markItemAsRegistered(smsHash: String) {
         if (smsHash.isBlank()) return
-        val targetHashes = smsHash.split("|").filter { it.isNotBlank() }.toSet()
+        val targetTokens = com.example.util.SmsHashUtil.extractHashTokens(smsHash)
+        if (targetTokens.isEmpty()) return
         _uiState.update { state ->
             val updated = state.scannedList.map { item ->
-                if (item.smsHash == smsHash || targetHashes.contains(item.smsHash) || smsHash.contains(item.smsHash)) {
+                val itemTokens = com.example.util.SmsHashUtil.extractHashTokens(item.smsHash)
+                if (itemTokens.any { it in targetTokens }) {
                     item.copy(isRegistered = true)
                 } else item
             }
             val updatedTransfers = state.detectedTransfers.map { tr ->
-                if (targetHashes.contains(tr.withdrawalItem.smsHash) ||
-                    targetHashes.contains(tr.depositItem.smsHash) ||
-                    tr.id == smsHash ||
-                    smsHash.contains(tr.withdrawalItem.smsHash) ||
-                    smsHash.contains(tr.depositItem.smsHash)
+                val wTokens = com.example.util.SmsHashUtil.extractHashTokens(tr.withdrawalItem.smsHash)
+                val dTokens = com.example.util.SmsHashUtil.extractHashTokens(tr.depositItem.smsHash)
+                if (tr.id == smsHash ||
+                    wTokens.any { it in targetTokens } ||
+                    dTokens.any { it in targetTokens }
                 ) {
                     tr.copy(isRegistered = true)
                 } else tr
             }
-            state.copy(scannedList = updated, detectedTransfers = updatedTransfers)
+            state.copy(
+                scannedList = sortScannedItems(updated),
+                detectedTransfers = sortDetectedTransfers(updatedTransfers)
+            )
         }
     }
 
@@ -305,45 +295,36 @@ class ScanSmsViewModel(
                     accountRepository.getAllAccountsList()
                 }
                 val accountMap = allAccounts.associateBy { it.id }
+                val consumedManualTxIds = mutableSetOf<Long>()
 
                 val updatedList = _uiState.value.scannedList.map { item ->
                     if (item.isRegistered) item
                     else {
                         val amt = item.parsedSms.amount ?: 0L
                         val smsDate = item.parsedSms.date ?: item.date
+                        val txType = item.parsedSms.transactionType ?: com.example.data.local.entity.TransactionType.EXPENSE
                         val accountIdent = item.parsedSms.accountIdentifier?.trim() ?: ""
                         val bankName = item.parsedSms.bankName?.trim() ?: ""
-                        val hash = item.smsHash
-                        val legacyHash = "${amt}_${smsDate}_${accountIdent}"
-                        val smsJalali = JalaliDate.fromTimestamp(smsDate)
+                        val legacyHashes = setOf(
+                            com.example.util.SmsHashUtil.calculateLegacyV1Hash(item.sender, amt, smsDate, item.rawText),
+                            com.example.util.SmsHashUtil.calculateLegacySimpleHash(amt, smsDate, accountIdent)
+                        )
 
-                        val isRegistered = existingTransactions.any { txItem ->
-                            val tx = txItem.transaction
-                            if (!tx.smsHash.isNullOrBlank()) {
-                                if (tx.smsHash == hash || tx.smsHash == legacyHash || tx.smsHash.contains(hash)) {
-                                    return@any true
-                                }
-                                val parts = tx.smsHash.split("|")
-                                if (parts.any { it == hash }) return@any true
-                            }
-                            if (tx.amount != amt) return@any false
-                            val txJalali = JalaliDate.fromTimestamp(tx.date)
-                            val sameDay = txJalali.year == smsJalali.year &&
-                                    txJalali.month == smsJalali.month &&
-                                    txJalali.day == smsJalali.day
-                            if (!sameDay) return@any false
-                            if (accountIdent.isNotBlank()) {
-                                val account = tx.accountId?.let { accountMap[it] }
-                                val card = account?.cardNumber ?: txItem.accountCardNumber
-                                val shaba = account?.shabaNumber
-                                val name = account?.name ?: txItem.accountName
-                                val matchesCard = card != null && (card.contains(accountIdent) || accountIdent.contains(card.takeLast(4)))
-                                val matchesShaba = shaba != null && shaba.contains(accountIdent)
-                                val matchesName = name != null && (name.contains(accountIdent) || accountIdent.contains(name))
-                                val matchesBank = bankName.isNotBlank() && name != null && (name.contains(bankName) || bankName.contains(name))
-                                matchesCard || matchesShaba || matchesName || matchesBank
-                            } else true
-                        }
+                        val isRegistered = com.example.util.SmsDeduplicator.isSmsRegistered(
+                            candidate = com.example.util.SmsDeduplicator.SmsCandidate(
+                                transactionType = txType,
+                                amount = amt,
+                                date = smsDate,
+                                primaryHash = item.smsHash,
+                                legacyHashes = legacyHashes,
+                                matchedAccountId = item.matchedAccountId,
+                                accountIdent = accountIdent,
+                                bankName = bankName
+                            ),
+                            existingTransactions = existingTransactions,
+                            accountsById = accountMap,
+                            consumedManualTxIds = consumedManualTxIds
+                        )
                         if (isRegistered) item.copy(isRegistered = true) else item
                     }
                 }
@@ -364,7 +345,10 @@ class ScanSmsViewModel(
                 }
 
                 _uiState.update { state ->
-                    state.copy(scannedList = finalList, detectedTransfers = transfers)
+                    state.copy(
+                        scannedList = sortScannedItems(finalList),
+                        detectedTransfers = sortDetectedTransfers(transfers)
+                    )
                 }
             } catch (e: Exception) {
                 // Ignore refresh failure
@@ -389,6 +373,24 @@ class ScanSmsViewModel(
             "رمز دوم", "کد ورود", "کد احراز", "کد صحت", "کد ثبت نام", "کد تائید"
         )
         return otpKeywords.any { text.contains(it, ignoreCase = true) }
+    }
+
+    companion object {
+        fun sortScannedItems(items: List<ScannedSmsItem>): List<ScannedSmsItem> {
+            return items.sortedWith(
+                compareBy<ScannedSmsItem> { it.isRegistered }
+                    .thenByDescending { it.date }
+            )
+        }
+
+        fun sortDetectedTransfers(
+            transfers: List<com.example.util.DetectedTransfer>
+        ): List<com.example.util.DetectedTransfer> {
+            return transfers.sortedWith(
+                compareBy<com.example.util.DetectedTransfer> { it.isRegistered }
+                    .thenByDescending { maxOf(it.withdrawalItem.date, it.depositItem.date) }
+            )
+        }
     }
 
     class Factory(

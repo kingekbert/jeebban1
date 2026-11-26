@@ -9,6 +9,7 @@ import com.example.FinTrackApp
 import com.example.data.local.entity.CategoryType
 import com.example.data.local.entity.TransactionEntity
 import com.example.data.local.entity.TransactionType
+import com.example.data.repository.DuplicateSmsTransactionException
 import com.example.util.CategoryGuesser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
@@ -34,6 +35,12 @@ object WidgetQuickRegister {
         try {
             val app = context.applicationContext as? FinTrackApp
             val appModule = app?.appModule ?: com.example.di.AppModule(context.applicationContext)
+
+            // 0. Guard against duplicate registration across app/widget paths
+            if (appModule.transactionRepository.isSmsHashRegistered(smsHash)) {
+                removeDuplicateAndNotify(context, smsHash)
+                return@withContext
+            }
 
             // 1. Resolve Account
             val allAccounts = appModule.accountRepository.getAllAccountsList()
@@ -92,6 +99,7 @@ object WidgetQuickRegister {
 
             // 4. Check for open Dong settlement if this is an Income SMS
             var isSavedSuccess = false
+            var isDuplicate = false
             if (txType == TransactionType.INCOME) {
                 val matchingShares = try {
                     appModule.groupExpenseRepository.findMatchingOpenShares(amount)
@@ -106,14 +114,25 @@ object WidgetQuickRegister {
                             incomeTransaction = transaction
                         )
                         isSavedSuccess = true
+                    } catch (e: DuplicateSmsTransactionException) {
+                        isDuplicate = true
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
                 }
             }
 
+            if (isDuplicate) {
+                removeDuplicateAndNotify(context, smsHash)
+                return@withContext
+            }
+
             if (!isSavedSuccess) {
                 val result = appModule.addTransactionUseCase(transaction)
+                if (result.exceptionOrNull() is DuplicateSmsTransactionException) {
+                    removeDuplicateAndNotify(context, smsHash)
+                    return@withContext
+                }
                 isSavedSuccess = result.isSuccess
             }
 
@@ -151,9 +170,28 @@ object WidgetQuickRegister {
             } else {
                 showErrorToast(context)
             }
+        } catch (e: DuplicateSmsTransactionException) {
+            removeDuplicateAndNotify(context, smsHash)
         } catch (e: Exception) {
             e.printStackTrace()
             showErrorToast(context)
+        }
+    }
+
+    private fun removeDuplicateAndNotify(context: Context, smsHash: String) {
+        val remaining = WidgetDataStore.removeItem(context, smsHash)
+        val curIdx = WidgetStatusHelper.getCurrentTransactionIndex(context)
+        if (curIdx >= remaining.size) {
+            WidgetStatusHelper.setCurrentTransactionIndex(context, maxOf(0, remaining.size - 1))
+        }
+        WidgetStatusHelper.saveScanResult(context, remaining.size)
+        WidgetStatusHelper.updateAllWidgets(context)
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                context,
+                "این پیامک قبلاً ثبت شده است",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 

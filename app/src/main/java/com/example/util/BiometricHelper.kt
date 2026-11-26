@@ -1,5 +1,6 @@
 package com.example.util
 
+import android.app.KeyguardManager
 import android.content.Context
 import android.os.Build
 import androidx.biometric.BiometricManager
@@ -18,18 +19,34 @@ object BiometricHelper {
 
     fun checkBiometricStatus(context: Context): BiometricAuthStatus {
         val biometricManager = BiometricManager.from(context)
-        val authenticators = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            return when (biometricManager.canAuthenticate(authenticators)) {
+                BiometricManager.BIOMETRIC_SUCCESS -> BiometricAuthStatus.AVAILABLE
+                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> BiometricAuthStatus.NOT_ENROLLED
+                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE,
+                BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> BiometricAuthStatus.NOT_AVAILABLE
+                else -> BiometricAuthStatus.UNSUPPORTED
+            }
         } else {
-            BiometricManager.Authenticators.BIOMETRIC_WEAK
-        }
-
-        return when (biometricManager.canAuthenticate(authenticators)) {
-            BiometricManager.BIOMETRIC_SUCCESS -> BiometricAuthStatus.AVAILABLE
-            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> BiometricAuthStatus.NOT_ENROLLED
-            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE,
-            BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> BiometricAuthStatus.NOT_AVAILABLE
-            else -> BiometricAuthStatus.UNSUPPORTED
+            val biometricResult = biometricManager.canAuthenticate(
+                BiometricManager.Authenticators.BIOMETRIC_WEAK
+            )
+            if (biometricResult == BiometricManager.BIOMETRIC_SUCCESS) {
+                return BiometricAuthStatus.AVAILABLE
+            }
+            val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            if (keyguardManager?.isDeviceSecure == true) {
+                return BiometricAuthStatus.AVAILABLE
+            }
+            return when (biometricResult) {
+                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> BiometricAuthStatus.NOT_ENROLLED
+                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE,
+                BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> BiometricAuthStatus.NOT_AVAILABLE
+                else -> BiometricAuthStatus.UNSUPPORTED
+            }
         }
     }
 
@@ -48,7 +65,9 @@ object BiometricHelper {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             promptInfoBuilder.setAllowedAuthenticators(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
             )
         } else {
             @Suppress("DEPRECATION")
@@ -73,7 +92,20 @@ object BiometricHelper {
                         errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
                         errorCode != BiometricPrompt.ERROR_CANCELED
                     ) {
-                        onError(errString.toString())
+                        val localizedMessage = when (errorCode) {
+                            BiometricPrompt.ERROR_LOCKOUT ->
+                                "تعداد تلاش‌های ناموفق زیاد بود. لطفاً چند ثانیه صبر کرده و دوباره تلاش کنید."
+                            BiometricPrompt.ERROR_LOCKOUT_PERMANENT ->
+                                "احراز هویت بیومتریک موقتاً قفل شد. لطفاً از رمز دستگاه استفاده کنید."
+                            BiometricPrompt.ERROR_NO_BIOMETRICS,
+                            BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL ->
+                                "هیچ اثر انگشت یا رمز صفحه‌ای در تنظیمات دستگاه تعریف نشده است."
+                            BiometricPrompt.ERROR_HW_NOT_PRESENT,
+                            BiometricPrompt.ERROR_HW_UNAVAILABLE ->
+                                "سخت‌افزار احراز هویت در دسترس نیست."
+                            else -> errString.toString().ifBlank { "خطا در احراز هویت" }
+                        }
+                        onError(localizedMessage)
                     }
                 }
 

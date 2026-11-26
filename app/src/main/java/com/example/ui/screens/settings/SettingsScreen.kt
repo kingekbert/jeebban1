@@ -1,10 +1,13 @@
 package com.example.ui.screens.settings
 
+import android.content.Context
+import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Pattern
 import androidx.compose.material.icons.filled.Restore
@@ -37,6 +42,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -45,6 +52,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -60,15 +68,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.entity.AccountEntity
 import com.example.ui.components.AccountIconDisplay
 import com.example.ui.theme.ExpenseColor
+import com.example.util.BiometricAuthStatus
+import com.example.util.BiometricHelper
 import com.example.util.toPersianDigits
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -290,6 +302,50 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            // Security & App Lock Card
+            item {
+                val hostActivity = remember(context) { context.findFragmentActivity() }
+                SecuritySettingsCard(
+                    isLockEnabled = state.isBiometricEnabled,
+                    lockGraceMs = state.lockGraceMs,
+                    isSecureScreenEnabled = state.isSecureScreenEnabled,
+                    onToggleLock = { targetEnabled ->
+                        val status = BiometricHelper.checkBiometricStatus(context)
+                        if (targetEnabled) {
+                            if (status != BiometricAuthStatus.AVAILABLE) {
+                                viewModel.showSecurityError(
+                                    "ابتدا در تنظیمات دستگاه، رمز صفحه یا اثر انگشت فعال کنید."
+                                )
+                            } else if (hostActivity != null) {
+                                BiometricHelper.authenticate(
+                                    activity = hostActivity,
+                                    title = "فعالسازی قفل جیب‌بان",
+                                    subtitle = "برای فعالسازی قفل، هویت خود را تأیید کنید",
+                                    onSuccess = { viewModel.setBiometricEnabled(true) },
+                                    onError = { err -> viewModel.showSecurityError(err) }
+                                )
+                            } else {
+                                viewModel.setBiometricEnabled(true)
+                            }
+                        } else {
+                            if (status == BiometricAuthStatus.AVAILABLE && hostActivity != null) {
+                                BiometricHelper.authenticate(
+                                    activity = hostActivity,
+                                    title = "غیرفعالسازی قفل جیب‌بان",
+                                    subtitle = "برای غیرفعالسازی قفل، هویت خود را تأیید کنید",
+                                    onSuccess = { viewModel.setBiometricEnabled(false) },
+                                    onError = { err -> viewModel.showSecurityError(err) }
+                                )
+                            } else {
+                                viewModel.setBiometricEnabled(false)
+                            }
+                        }
+                    },
+                    onSelectGraceMs = { viewModel.setLockGraceMs(it) },
+                    onToggleSecureScreen = { viewModel.setSecureScreenEnabled(it) }
+                )
             }
 
             // Theme Mode Card
@@ -1135,6 +1191,152 @@ fun AboutAppCard() {
                     text = "اپلیکیشن هوشمند مدیریت مالی شخصی جیب‌بان، حساب‌ها و تراکنش‌ها به صورت ۱۰۰٪ آفلاین و امن روی دستگاه شما.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private tailrec fun Context.findFragmentActivity(): FragmentActivity? = when (this) {
+    is FragmentActivity -> this
+    is ContextWrapper -> baseContext.findFragmentActivity()
+    else -> null
+}
+
+@Composable
+fun SecuritySettingsCard(
+    isLockEnabled: Boolean,
+    lockGraceMs: Long,
+    isSecureScreenEnabled: Boolean,
+    onToggleLock: (Boolean) -> Unit,
+    onSelectGraceMs: (Long) -> Unit,
+    onToggleSecureScreen: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("security_settings_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "امنیت و حریم خصوصی",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // App Lock Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "قفل اپلیکیشن",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "ورود با اثر انگشت یا رمز دستگاه",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Switch(
+                    checked = isLockEnabled,
+                    onCheckedChange = onToggleLock,
+                    modifier = Modifier.testTag("app_lock_switch")
+                )
+            }
+
+            // Lock Grace Period Options (visible when lock is enabled)
+            if (isLockEnabled) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "مهلت قفل مجدد پس از خروج:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val graceOptions = listOf(
+                        0L to "فوری",
+                        30_000L to "۳۰ ثانیه",
+                        60_000L to "۱ دقیقه",
+                        300_000L to "۵ دقیقه"
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        graceOptions.forEach { (ms, label) ->
+                            FilterChip(
+                                selected = lockGraceMs == ms,
+                                onClick = { onSelectGraceMs(ms) },
+                                label = { Text(label.toPersianDigits()) },
+                                modifier = Modifier.testTag("lock_grace_chip_$ms")
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            // Secure Screen (FLAG_SECURE) Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "محافظت در برنامه‌های اخیر",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = if (isLockEnabled) {
+                            "جلوگیری از اسکرین‌شات و مخفی‌سازی پیش‌نمایش (همراه قفل فعال است)"
+                        } else {
+                            "جلوگیری از گرفتن اسکرین‌شات و نمایش محتوا در لیست برنامه‌های اخیر"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Switch(
+                    checked = isLockEnabled || isSecureScreenEnabled,
+                    onCheckedChange = onToggleSecureScreen,
+                    enabled = !isLockEnabled,
+                    modifier = Modifier.testTag("secure_screen_switch")
                 )
             }
         }

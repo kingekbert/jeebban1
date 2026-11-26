@@ -47,4 +47,12 @@ class Preferences(private val context: Context) {
     var isSecureScreenEnabled: Boolean
         get() = prefs.getBoolean(Constants.KEY_SECURE_SCREEN_ENABLED, false)
         set(value) = prefs.edit().putBoolean(Constants.KEY_SECURE_SCREEN_ENABLED, value).apply()
+
+    var lockGraceMs: Long
+        get() = prefs.getLong(Constants.KEY_LOCK_GRACE_MS, Constants.DEFAULT_LOCK_GRACE_MS)
+        set(value) = prefs.edit().putLong(Constants.KEY_LOCK_GRACE_MS, value.coerceAtLeast(0L)).apply()
+
+    var lastBackgroundAt: Long
+        get() = prefs.getLong(Constants.KEY_LAST_BACKGROUND_AT, 0L)
+        set(value) = prefs.edit().putLong(Constants.KEY_LAST_BACKGROUND_AT, value).apply()
 }

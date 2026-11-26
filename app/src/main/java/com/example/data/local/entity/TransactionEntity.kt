@@ -35,7 +35,8 @@ enum class TransactionType {
         Index("accountId"),
         Index("toAccountId"),
         Index("categoryId"),
-        Index("recurringId")
+        Index("recurringId"),
+        Index("smsHash")
     ]
 )
 data class TransactionEntity(

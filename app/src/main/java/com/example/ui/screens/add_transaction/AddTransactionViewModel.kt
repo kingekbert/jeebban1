@@ -15,6 +15,7 @@ import com.example.data.repository.GroupExpenseRepository
 import com.example.data.repository.SettingsRepository
 import com.example.domain.usecase.AddTransactionUseCase
 import com.example.util.AmountFormatter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class GroupShareInput(
     val id: String = UUID.randomUUID().toString(),
@@ -70,6 +72,7 @@ class AddTransactionViewModel(
         )
     )
     val uiState: StateFlow<AddTransactionUiState> = _uiState.asStateFlow()
+    private val isSavingGuard = AtomicBoolean(false)
 
     init {
         loadData()
@@ -263,6 +266,9 @@ class AddTransactionViewModel(
 
     fun saveTransaction() {
         val state = _uiState.value
+        if (state.isLoading || state.isSuccess) {
+            return
+        }
         if (state.amount <= 0L) {
             _uiState.update { it.copy(errorMessage = "لطفاً مبلغ معتبری وارد کنید") }
             return
@@ -285,7 +291,8 @@ class AddTransactionViewModel(
         }
 
         // Validate Group Expense
-        if (state.type == TransactionType.EXPENSE && state.isGroupExpenseEnabled) {
+        val isGroupExpense = state.type == TransactionType.EXPENSE && state.isGroupExpenseEnabled
+        if (isGroupExpense) {
             if (state.groupShares.isEmpty()) {
                 _uiState.update { it.copy(errorMessage = "لطفاً حداقل نام یک دوست را برای هزینه مشترک وارد کنید") }
                 return
@@ -295,6 +302,10 @@ class AddTransactionViewModel(
                 return
             }
             if (state.groupShareMode == GroupExpenseShareMode.CUSTOM) {
+                if (state.groupShares.any { it.amount < 0L }) {
+                    _uiState.update { it.copy(errorMessage = "مبلغ سهم افراد نمی‌تواند منفی باشد") }
+                    return
+                }
                 val sumFriendsShares = state.groupShares.sumOf { it.amount }
                 if (sumFriendsShares > state.amount) {
                     val diff = sumFriendsShares - state.amount
@@ -305,57 +316,78 @@ class AddTransactionViewModel(
             }
         }
 
+        // Synchronous guard prevents duplicate inserts from rapid double-clicks
+        if (!isSavingGuard.compareAndSet(false, true)) {
+            return
+        }
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            try {
+                val finalTimestamp = com.example.util.DateFormatter.combineDateAndTime(
+                    state.dateTimestamp,
+                    state.selectedHour,
+                    state.selectedMinute
+                )
 
-            val finalTimestamp = com.example.util.DateFormatter.combineDateAndTime(
-                state.dateTimestamp,
-                state.selectedHour,
-                state.selectedMinute
-            )
+                val transaction = TransactionEntity(
+                    type = state.type,
+                    amount = state.amount,
+                    accountId = state.selectedAccount.id,
+                    toAccountId = if (state.type == TransactionType.TRANSFER) state.selectedToAccount?.id else null,
+                    categoryId = if (state.type != TransactionType.TRANSFER) state.selectedCategory?.id else null,
+                    date = finalTimestamp,
+                    note = state.note.ifBlank { null }
+                )
 
-            val transaction = TransactionEntity(
-                type = state.type,
-                amount = state.amount,
-                accountId = state.selectedAccount.id,
-                toAccountId = if (state.type == TransactionType.TRANSFER) state.selectedToAccount?.id else null,
-                categoryId = if (state.type != TransactionType.TRANSFER) state.selectedCategory?.id else null,
-                date = finalTimestamp,
-                note = state.note.ifBlank { null }
-            )
-
-            val result = addTransactionUseCase(transaction)
-            result.onSuccess { txId ->
-                // If group expense was enabled, save shares
-                if (state.type == TransactionType.EXPENSE && state.isGroupExpenseEnabled && state.groupShares.isNotEmpty()) {
+                val saveResult: Result<Long> = if (isGroupExpense) {
                     val finalShares = if (state.groupShareMode == GroupExpenseShareMode.EQUAL) {
                         recalculateEqualShares(state.groupShares, state.amount)
-                    } else state.groupShares
-
-                    groupExpenseRepository.saveGroupExpense(
-                        transactionId = txId,
+                    } else {
+                        state.groupShares
+                    }
+                    addTransactionUseCase.addGroupExpenseWithShares(
+                        expenseTransaction = transaction,
                         shareMode = state.groupShareMode,
-                        shares = finalShares.map { it.name to it.amount }
-                    )
+                        shares = finalShares.map { it.name to it.amount },
+                        repositoryOverride = groupExpenseRepository
+                    ).map { it.transactionId }
+                } else {
+                    addTransactionUseCase(transaction)
                 }
 
-                settingsRepository.lastAccountId = state.selectedAccount.id
-                state.selectedCategory?.let { cat ->
-                    settingsRepository.lastCategoryId = cat.id
-                    if (state.type == TransactionType.EXPENSE) {
-                        settingsRepository.lastExpenseCategoryId = cat.id
-                    } else if (state.type == TransactionType.INCOME) {
-                        settingsRepository.lastIncomeCategoryId = cat.id
+                saveResult.onSuccess {
+                    settingsRepository.lastAccountId = state.selectedAccount.id
+                    state.selectedCategory?.let { cat ->
+                        settingsRepository.lastCategoryId = cat.id
+                        if (state.type == TransactionType.EXPENSE) {
+                            settingsRepository.lastExpenseCategoryId = cat.id
+                        } else if (state.type == TransactionType.INCOME) {
+                            settingsRepository.lastIncomeCategoryId = cat.id
+                        }
+                    }
+                    _uiState.update { it.copy(isLoading = false, isSuccess = true, errorMessage = null) }
+                }.onFailure { ex ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isSuccess = false,
+                            errorMessage = ex.message ?: "خطا در ثبت تراکنش"
+                        )
                     }
                 }
-                _uiState.update { it.copy(isLoading = false, isSuccess = true) }
-            }.onFailure { ex ->
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        errorMessage = ex.message ?: "خطا در ثبت تراکنش"
+                        isSuccess = false,
+                        errorMessage = e.message ?: "خطا در ثبت تراکنش"
                     )
                 }
+            } finally {
+                isSavingGuard.set(false)
             }
         }
     }

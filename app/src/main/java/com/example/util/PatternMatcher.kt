@@ -105,19 +105,60 @@ object PatternMatcher {
                         }
                     }
                     FieldType.DATE_YEAR -> {
-                        yearStr = convertToEnglish(currentToken.text).filter { it.isDigit() }
+                        val digits = convertToEnglish(currentToken.text).filter { it.isDigit() }
+                        val rawYear = digits.toIntOrNull()
+                        val normalizedYear = when {
+                            rawYear == null -> null
+                            digits.length == 2 -> rawYear + 1400
+                            digits.length == 4 -> rawYear
+                            else -> null
+                        }
+                        if (normalizedYear != null && normalizedYear in 1300..1500) {
+                            yearStr = normalizedYear.toString()
+                        } else {
+                            hasMatchingFailure = true
+                            break
+                        }
                     }
                     FieldType.DATE_MONTH -> {
-                        monthStr = convertToEnglish(currentToken.text).filter { it.isDigit() }
+                        val digits = convertToEnglish(currentToken.text).filter { it.isDigit() }
+                        val parsedMonth = digits.toIntOrNull()
+                        if (parsedMonth != null && parsedMonth in 1..12) {
+                            monthStr = parsedMonth.toString()
+                        } else {
+                            hasMatchingFailure = true
+                            break
+                        }
                     }
                     FieldType.DATE_DAY -> {
-                        dayStr = convertToEnglish(currentToken.text).filter { it.isDigit() }
+                        val digits = convertToEnglish(currentToken.text).filter { it.isDigit() }
+                        val parsedDay = digits.toIntOrNull()
+                        if (parsedDay != null && parsedDay in 1..31) {
+                            dayStr = parsedDay.toString()
+                        } else {
+                            hasMatchingFailure = true
+                            break
+                        }
                     }
                     FieldType.TIME_HOUR -> {
-                        hourStr = convertToEnglish(currentToken.text).filter { it.isDigit() }
+                        val digits = convertToEnglish(currentToken.text).filter { it.isDigit() }
+                        val parsedHour = digits.toIntOrNull()
+                        if (parsedHour != null && parsedHour in 0..23) {
+                            hourStr = parsedHour.toString()
+                        } else {
+                            hasMatchingFailure = true
+                            break
+                        }
                     }
                     FieldType.TIME_MINUTE -> {
-                        minStr = convertToEnglish(currentToken.text).filter { it.isDigit() }
+                        val digits = convertToEnglish(currentToken.text).filter { it.isDigit() }
+                        val parsedMin = digits.toIntOrNull()
+                        if (parsedMin != null && parsedMin in 0..59) {
+                            minStr = parsedMin.toString()
+                        } else {
+                            hasMatchingFailure = true
+                            break
+                        }
                     }
                     FieldType.DESCRIPTION -> {
                         description = if (description == null) currentToken.text else "$description ${currentToken.text}"
@@ -237,6 +278,107 @@ object PatternMatcher {
                     result.add(ExtractedField(m, field.lineIndex, FieldType.DATE_MONTH))
                     result.add(ExtractedField(d, field.lineIndex, FieldType.DATE_DAY))
                     i++
+                    continue
+                }
+            }
+
+            // 4. Legacy single-digit date/time bug:
+            // Previously `1405/9/3-12:37` was split into [TIME_HOUR, TIME_MINUTE, DATE_YEAR, DATE_MONTH, DATE_DAY, IGNORE("-")]
+            // and `1405/9/2-3:51` was split into [DATE_YEAR, DATE_MONTH, DATE_DAY, IGNORE("-"), TIME_HOUR, TIME_MINUTE].
+            // Normalize both to the canonical [DATE_YEAR, DATE_MONTH, DATE_DAY, TIME_HOUR, TIME_MINUTE] order.
+            if (i + 5 < savedFields.size) {
+                val f0 = savedFields[i]
+                val f1 = savedFields[i + 1]
+                val f2 = savedFields[i + 2]
+                val f3 = savedFields[i + 3]
+                val f4 = savedFields[i + 4]
+                val f5 = savedFields[i + 5]
+                val sameLine = f0.lineIndex == f1.lineIndex &&
+                    f1.lineIndex == f2.lineIndex &&
+                    f2.lineIndex == f3.lineIndex &&
+                    f3.lineIndex == f4.lineIndex &&
+                    f4.lineIndex == f5.lineIndex
+
+                if (sameLine &&
+                    f0.fieldType == FieldType.TIME_HOUR &&
+                    f1.fieldType == FieldType.TIME_MINUTE &&
+                    f2.fieldType == FieldType.DATE_YEAR &&
+                    f3.fieldType == FieldType.DATE_MONTH &&
+                    f4.fieldType == FieldType.DATE_DAY &&
+                    (f5.fieldType == null || f5.fieldType == FieldType.IGNORE) &&
+                    (f5.text.trim() == "-" || f5.text.trim() == "_")
+                ) {
+                    result.add(f2)
+                    result.add(f3)
+                    result.add(f4)
+                    result.add(f0)
+                    result.add(f1)
+                    i += 6
+                    continue
+                }
+
+                if (sameLine &&
+                    f0.fieldType == FieldType.DATE_YEAR &&
+                    f1.fieldType == FieldType.DATE_MONTH &&
+                    f2.fieldType == FieldType.DATE_DAY &&
+                    (f3.fieldType == null || f3.fieldType == FieldType.IGNORE) &&
+                    (f3.text.trim() == "-" || f3.text.trim() == "_") &&
+                    f4.fieldType == FieldType.TIME_HOUR &&
+                    f5.fieldType == FieldType.TIME_MINUTE
+                ) {
+                    result.add(f0)
+                    result.add(f1)
+                    result.add(f2)
+                    result.add(f4)
+                    result.add(f5)
+                    i += 6
+                    continue
+                }
+            }
+
+            // 5. Legacy single-digit month/day without year:
+            // [TIME_HOUR, TIME_MINUTE, DATE_MONTH, DATE_DAY, IGNORE("-")] or
+            // [DATE_MONTH, DATE_DAY, IGNORE("-"), TIME_HOUR, TIME_MINUTE]
+            if (i + 4 < savedFields.size) {
+                val f0 = savedFields[i]
+                val f1 = savedFields[i + 1]
+                val f2 = savedFields[i + 2]
+                val f3 = savedFields[i + 3]
+                val f4 = savedFields[i + 4]
+                val sameLine = f0.lineIndex == f1.lineIndex &&
+                    f1.lineIndex == f2.lineIndex &&
+                    f2.lineIndex == f3.lineIndex &&
+                    f3.lineIndex == f4.lineIndex
+
+                if (sameLine &&
+                    f0.fieldType == FieldType.TIME_HOUR &&
+                    f1.fieldType == FieldType.TIME_MINUTE &&
+                    f2.fieldType == FieldType.DATE_MONTH &&
+                    f3.fieldType == FieldType.DATE_DAY &&
+                    (f4.fieldType == null || f4.fieldType == FieldType.IGNORE) &&
+                    (f4.text.trim() == "-" || f4.text.trim() == "_")
+                ) {
+                    result.add(f2)
+                    result.add(f3)
+                    result.add(f0)
+                    result.add(f1)
+                    i += 5
+                    continue
+                }
+
+                if (sameLine &&
+                    f0.fieldType == FieldType.DATE_MONTH &&
+                    f1.fieldType == FieldType.DATE_DAY &&
+                    (f2.fieldType == null || f2.fieldType == FieldType.IGNORE) &&
+                    (f2.text.trim() == "-" || f2.text.trim() == "_") &&
+                    f3.fieldType == FieldType.TIME_HOUR &&
+                    f4.fieldType == FieldType.TIME_MINUTE
+                ) {
+                    result.add(f0)
+                    result.add(f1)
+                    result.add(f3)
+                    result.add(f4)
+                    i += 5
                     continue
                 }
             }

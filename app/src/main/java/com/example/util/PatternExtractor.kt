@@ -82,34 +82,56 @@ object PatternExtractor {
             var workingChunk = chunk
 
             // Check date/time patterns from longest to shortest
-            // Pattern 4: YY/MM/DD-HH:MM or YYYY/MM/DD-HH:MM (e.g. 05/04/21-16:34 or 1405/04/21-16:34)
-            val p4 = Regex("""([\d۰-۹٠-٩]{2,4})/([\d۰-۹٠-٩]{2})/([\d۰-۹٠-٩]{2})[_\-]([\d۰-۹٠-٩]{2}):([\d۰-۹٠-٩]{2})""")
+            // Pattern 4: YY/M/D-H:MM or YYYY/M/D-H:MM (e.g. 05/04/21-16:34, 1405/9/2-3:51, 1405/9/3-12:37)
+            val p4 = Regex("""([\d۰-۹٠-٩]{2,4})/([\d۰-۹٠-٩]{1,2})/([\d۰-۹٠-٩]{1,2})[_\-]([\d۰-۹٠-٩]{1,2}):([\d۰-۹٠-٩]{2})""")
             val m4 = p4.find(workingChunk)
             if (m4 != null) {
-                tokens.add(m4.groupValues[1])
-                tokens.add(m4.groupValues[2])
-                tokens.add(m4.groupValues[3])
-                tokens.add(m4.groupValues[4])
-                tokens.add(m4.groupValues[5])
-                workingChunk = workingChunk.removeRange(m4.range).trim()
-                if (workingChunk.isEmpty()) continue
+                val rawY = m4.groupValues[1]
+                val rawM = m4.groupValues[2]
+                val rawD = m4.groupValues[3]
+                val rawH = m4.groupValues[4]
+                val rawMin = m4.groupValues[5]
+                val yLen = rawY.length
+                val mInt = toEnglishDigits(rawM).toIntOrNull() ?: -1
+                val dInt = toEnglishDigits(rawD).toIntOrNull() ?: -1
+                val hInt = toEnglishDigits(rawH).toIntOrNull() ?: -1
+                val minInt = toEnglishDigits(rawMin).toIntOrNull() ?: -1
+                if ((yLen == 2 || yLen == 4) && mInt in 1..12 && dInt in 1..31 && hInt in 0..23 && minInt in 0..59) {
+                    tokens.add(rawY)
+                    tokens.add(rawM)
+                    tokens.add(rawD)
+                    tokens.add(rawH)
+                    tokens.add(rawMin)
+                    workingChunk = workingChunk.removeRange(m4.range).trim()
+                    if (workingChunk.isEmpty()) continue
+                }
             }
 
-            // Pattern 2 & 3: MM/DD_HH:MM or MM/DD-HH:MM (e.g. 05/20_18:20 or 05/12-19:46)
-            val p23 = Regex("""([\d۰-۹٠-٩]{2})/([\d۰-۹٠-٩]{2})[_\-]([\d۰-۹٠-٩]{2}):([\d۰-۹٠-٩]{2})""")
+            // Pattern 2 & 3: M/D_H:MM or M/D-H:MM (e.g. 05/20_18:20, 9/2-3:51)
+            val p23 = Regex("""([\d۰-۹٠-٩]{1,2})/([\d۰-۹٠-٩]{1,2})[_\-]([\d۰-۹٠-٩]{1,2}):([\d۰-۹٠-٩]{2})""")
             val m23 = p23.find(workingChunk)
             if (m23 != null) {
-                tokens.add(m23.groupValues[1])
-                tokens.add(m23.groupValues[2])
-                tokens.add(m23.groupValues[3])
-                tokens.add(m23.groupValues[4])
-                workingChunk = workingChunk.removeRange(m23.range).trim()
-                if (workingChunk.isEmpty()) continue
+                val rawM = m23.groupValues[1]
+                val rawD = m23.groupValues[2]
+                val rawH = m23.groupValues[3]
+                val rawMin = m23.groupValues[4]
+                val mInt = toEnglishDigits(rawM).toIntOrNull() ?: -1
+                val dInt = toEnglishDigits(rawD).toIntOrNull() ?: -1
+                val hInt = toEnglishDigits(rawH).toIntOrNull() ?: -1
+                val minInt = toEnglishDigits(rawMin).toIntOrNull() ?: -1
+                if (mInt in 1..12 && dInt in 1..31 && hInt in 0..23 && minInt in 0..59) {
+                    tokens.add(rawM)
+                    tokens.add(rawD)
+                    tokens.add(rawH)
+                    tokens.add(rawMin)
+                    workingChunk = workingChunk.removeRange(m23.range).trim()
+                    if (workingChunk.isEmpty()) continue
+                }
             }
 
-            // Priority Pattern: MMDD-HH:MM or MMDD_HH:MM (e.g. 0706-21:05 or 0525-17:28)
-            // Group 1 = Month (01-12), Group 2 = Day (01-31), Group 3 = Hour (00-23), Group 4 = Minute (00-59)
-            val pMmDdTime = Regex("""([\d۰-۹٠-٩]{2})([\d۰-۹٠-٩]{2})[_\-]([\d۰-۹٠-٩]{2}):([\d۰-۹٠-٩]{2})""")
+            // Priority Pattern: MMDD-H:MM or MMDD_H:MM (e.g. 0706-21:05 or 0525-7:28)
+            // Group 1 = Month (01-12), Group 2 = Day (01-31), Group 3 = Hour (0-23), Group 4 = Minute (00-59)
+            val pMmDdTime = Regex("""([\d۰-۹٠-٩]{2})([\d۰-۹٠-٩]{2})[_\-]([\d۰-۹٠-٩]{1,2}):([\d۰-۹٠-٩]{2})""")
             val mMmDdTime = pMmDdTime.find(workingChunk)
             if (mMmDdTime != null) {
                 val rawM = mMmDdTime.groupValues[1]
@@ -130,36 +152,58 @@ object PatternExtractor {
                 }
             }
 
-            // Pattern 5: YYYY/MM/DD or YY/MM/DD (e.g. 1405/03/01)
-            val p5 = Regex("""([\d۰-۹٠-٩]{2,4})/([\d۰-۹٠-٩]{2})/([\d۰-۹٠-٩]{2})""")
+            // Pattern 5: YYYY/M/D or YY/M/D (e.g. 1405/03/01 or 1405/9/2)
+            val p5 = Regex("""([\d۰-۹٠-٩]{2,4})/([\d۰-۹٠-٩]{1,2})/([\d۰-۹٠-٩]{1,2})""")
             val m5 = p5.find(workingChunk)
             if (m5 != null) {
-                tokens.add(m5.groupValues[1])
-                tokens.add(m5.groupValues[2])
-                tokens.add(m5.groupValues[3])
-                workingChunk = workingChunk.removeRange(m5.range).trim()
-                if (workingChunk.isEmpty()) continue
+                val rawY = m5.groupValues[1]
+                val rawM = m5.groupValues[2]
+                val rawD = m5.groupValues[3]
+                val yLen = rawY.length
+                val mInt = toEnglishDigits(rawM).toIntOrNull() ?: -1
+                val dInt = toEnglishDigits(rawD).toIntOrNull() ?: -1
+                if ((yLen == 2 || yLen == 4) && mInt in 1..12 && dInt in 1..31) {
+                    tokens.add(rawY)
+                    tokens.add(rawM)
+                    tokens.add(rawD)
+                    workingChunk = workingChunk.removeRange(m5.range).trim()
+                    if (workingChunk.isEmpty()) continue
+                }
             }
 
-            // Pattern 6: HH:MM:SS (e.g. 21:05:28)
-            val p6 = Regex("""([\d۰-۹٠-٩]{2}):([\d۰-۹٠-٩]{2}):([\d۰-۹٠-٩]{2})""")
+            // Pattern 6: H:MM:SS (e.g. 21:05:28 or 3:05:28)
+            val p6 = Regex("""([\d۰-۹٠-٩]{1,2}):([\d۰-۹٠-٩]{2}):([\d۰-۹٠-٩]{2})""")
             val m6 = p6.find(workingChunk)
             if (m6 != null) {
-                tokens.add(m6.groupValues[1])
-                tokens.add(m6.groupValues[2])
-                tokens.add(m6.groupValues[3])
-                workingChunk = workingChunk.removeRange(m6.range).trim()
-                if (workingChunk.isEmpty()) continue
+                val rawH = m6.groupValues[1]
+                val rawMin = m6.groupValues[2]
+                val rawSec = m6.groupValues[3]
+                val hInt = toEnglishDigits(rawH).toIntOrNull() ?: -1
+                val minInt = toEnglishDigits(rawMin).toIntOrNull() ?: -1
+                val secInt = toEnglishDigits(rawSec).toIntOrNull() ?: -1
+                if (hInt in 0..23 && minInt in 0..59 && secInt in 0..59) {
+                    tokens.add(rawH)
+                    tokens.add(rawMin)
+                    tokens.add(rawSec)
+                    workingChunk = workingChunk.removeRange(m6.range).trim()
+                    if (workingChunk.isEmpty()) continue
+                }
             }
 
-            // Pattern 7: HH:MM (e.g. 18:20)
-            val p7 = Regex("""([\d۰-۹٠-٩]{2}):([\d۰-۹٠-٩]{2})""")
+            // Pattern 7: H:MM (e.g. 18:20 or 3:51)
+            val p7 = Regex("""([\d۰-۹٠-٩]{1,2}):([\d۰-۹٠-٩]{2})""")
             val m7 = p7.find(workingChunk)
             if (m7 != null) {
-                tokens.add(m7.groupValues[1])
-                tokens.add(m7.groupValues[2])
-                workingChunk = workingChunk.removeRange(m7.range).trim()
-                if (workingChunk.isEmpty()) continue
+                val rawH = m7.groupValues[1]
+                val rawMin = m7.groupValues[2]
+                val hInt = toEnglishDigits(rawH).toIntOrNull() ?: -1
+                val minInt = toEnglishDigits(rawMin).toIntOrNull() ?: -1
+                if (hInt in 0..23 && minInt in 0..59) {
+                    tokens.add(rawH)
+                    tokens.add(rawMin)
+                    workingChunk = workingChunk.removeRange(m7.range).trim()
+                    if (workingChunk.isEmpty()) continue
+                }
             }
 
             // Pattern 8: Standalone MMDD (e.g. "0706" in line with month 01-12 and day 01-31)
