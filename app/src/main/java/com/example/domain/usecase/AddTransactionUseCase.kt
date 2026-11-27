@@ -31,6 +31,14 @@ class AddTransactionUseCase(
         if (transaction.accountId == null) {
             return Result.failure(IllegalArgumentException("حساب انتخاب نشده است"))
         }
+        if (transaction.type == TransactionType.TRANSFER) {
+            if (transaction.toAccountId == null) {
+                return Result.failure(IllegalArgumentException("حساب مقصد انتخاب نشده است"))
+            }
+            if (transaction.accountId == transaction.toAccountId) {
+                return Result.failure(IllegalArgumentException("حساب مبدأ و مقصد نمی‌توانند یکسان باشند"))
+            }
+        }
         return try {
             val id = transactionRepository.insertTransaction(transaction)
 
