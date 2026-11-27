@@ -51,7 +51,7 @@ abstract class FinTrackDatabase : RoomDatabase() {
     abstract fun accountBalanceSnapshotDao(): com.example.data.local.dao.AccountBalanceSnapshotDao
 
     companion object {
-        const val DATABASE_VERSION = 14
+        const val DATABASE_VERSION = 15
 
         @Volatile
         private var INSTANCE: FinTrackDatabase? = null
@@ -273,6 +273,13 @@ abstract class FinTrackDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_14_15 = object : androidx.room.migration.Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE transactions ADD COLUMN transferParentId INTEGER REFERENCES transactions(id) ON UPDATE NO ACTION ON DELETE CASCADE")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_transferParentId ON transactions (transferParentId)")
+            }
+        }
+
         fun getInstance(context: Context): FinTrackDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -290,7 +297,8 @@ abstract class FinTrackDatabase : RoomDatabase() {
                     MIGRATION_10_11,
                     MIGRATION_11_12,
                     MIGRATION_12_13,
-                    MIGRATION_13_14
+                    MIGRATION_13_14,
+                    MIGRATION_14_15
                 )
                 .build()
                 INSTANCE = instance
