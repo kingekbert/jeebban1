@@ -29,6 +29,12 @@ enum class TransactionType {
             parentColumns = ["id"],
             childColumns = ["categoryId"],
             onDelete = ForeignKey.SET_NULL
+        ),
+        ForeignKey(
+            entity = TransactionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["transferParentId"],
+            onDelete = ForeignKey.CASCADE
         )
     ],
     indices = [
@@ -36,7 +42,8 @@ enum class TransactionType {
         Index("toAccountId"),
         Index("categoryId"),
         Index("recurringId"),
-        Index("smsHash")
+        Index("smsHash"),
+        Index("transferParentId")
     ]
 )
 data class TransactionEntity(
@@ -53,5 +60,6 @@ data class TransactionEntity(
     val recurringId: Long? = null,
     val executedForDate: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val isBookmarked: Boolean = false
+    val isBookmarked: Boolean = false,
+    val transferParentId: Long? = null
 )
