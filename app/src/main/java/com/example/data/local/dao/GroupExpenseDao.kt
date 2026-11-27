@@ -52,6 +52,9 @@ interface GroupExpenseDao {
     @Query("SELECT * FROM group_expense_shares WHERE id = :shareId LIMIT 1")
     suspend fun getShareById(shareId: Long): GroupExpenseShareEntity?
 
+    @Query("SELECT * FROM group_expense_shares WHERE settledTransactionId = :transactionId")
+    suspend fun getSharesSettledByTransaction(transactionId: Long): List<GroupExpenseShareEntity>
+
     @Query("SELECT * FROM group_expense_shares WHERE isSettled = 0 AND amount = :amount")
     suspend fun getOpenSharesByAmount(amount: Long): List<GroupExpenseShareEntity>
 
