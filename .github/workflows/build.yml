@@ -39,4 +39,3 @@ jobs:
         with:
           name: Jeebban-APK
           path: app/build/outputs/apk/debug/Jeebban.apk
-
