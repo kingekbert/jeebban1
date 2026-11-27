@@ -170,7 +170,52 @@ class TransactionRepository(
     suspend fun insert(transaction: TransactionEntity): Long = insertTransaction(transaction)
 
     suspend fun updateTransaction(transaction: TransactionEntity) = withContext(Dispatchers.IO) {
-        transactionDao.update(transaction)
+        val db = database ?: run {
+            transactionDao.update(transaction)
+            return@withContext
+        }
+        db.withTransaction {
+            val original = transactionDao.getByIdSync(transaction.id)
+                ?: throw IllegalStateException("تراکنش برای ویرایش یافت نشد")
+            val linkedSavings = db.savingsGoalDao().getEntriesLinkedToTransaction(transaction.id)
+            val groupExpense = db.groupExpenseDao().getByTransactionId(transaction.id)
+
+            if (linkedSavings.isNotEmpty()) {
+                if (linkedSavings.size != 1) {
+                    throw IllegalStateException("این تراکنش به چند رکورد پس‌انداز متصل است و ویرایش آن امن نیست")
+                }
+                val expectedType = when (linkedSavings.single().type) {
+                    com.example.data.local.entity.SavingsEntryType.DEPOSIT -> TransactionType.EXPENSE
+                    com.example.data.local.entity.SavingsEntryType.WITHDRAW -> TransactionType.INCOME
+                }
+                if (transaction.type != expectedType) {
+                    throw IllegalArgumentException("نوع تراکنش مرتبط با پس‌انداز را نمی‌توان تغییر داد")
+                }
+            }
+
+            if (groupExpense != null) {
+                if (transaction.type != TransactionType.EXPENSE) {
+                    throw IllegalArgumentException("تراکنش هزینه مشترک باید از نوع هزینه باقی بماند")
+                }
+                val totalShares = groupExpense.shares.sumOf { it.amount }
+                if (transaction.amount < totalShares) {
+                    throw IllegalArgumentException("مبلغ تراکنش از مجموع سهم‌های ثبت‌شده کمتر است")
+                }
+            }
+
+            // Editing visible fields must not detach SMS identity or recurring history.
+            val preserved = transaction.copy(
+                smsHash = original.smsHash,
+                recurringId = original.recurringId,
+                executedForDate = original.executedForDate,
+                createdAt = original.createdAt
+            )
+            transactionDao.update(preserved)
+
+            linkedSavings.singleOrNull()?.let { entry ->
+                db.savingsGoalDao().updateEntry(entry.copy(amount = transaction.amount, date = transaction.date))
+            }
+        }
     }
 
     suspend fun deleteTransaction(transaction: TransactionEntity) = withContext(Dispatchers.IO) {
@@ -188,6 +233,9 @@ class TransactionRepository(
                 val groupExpense = db.groupExpenseDao().getByTransactionId(transaction.id)
                 val savingsEntries = db.savingsGoalDao().getEntriesLinkedToTransaction(transaction.id)
                 val settledShares = db.groupExpenseDao().getSharesSettledByTransaction(transaction.id)
+                settledShares.forEach { share ->
+                    db.groupExpenseDao().updateShare(share.copy(isSettled = false, settledTransactionId = null))
+                }
                 transactionDao.deleteById(transaction.id)
                 DeletedTransactionSnapshot(transaction, groupExpense, savingsEntries, settledShares)
             }
