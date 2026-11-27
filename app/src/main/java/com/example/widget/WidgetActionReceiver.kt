@@ -17,6 +17,10 @@ class WidgetActionReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             SmsScanWidgetProvider.ACTION_TRIGGER_SCAN -> {
+                if (isAppLocked(context)) {
+                    openAppForUnlock(context)
+                    return
+                }
                 val result = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
