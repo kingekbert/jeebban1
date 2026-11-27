@@ -171,6 +171,7 @@ class AtomicTransferWithFeeTest {
         assertEquals(10_000_000L, dao.committedTransactions[0].amount)
         assertEquals(TransactionType.EXPENSE, dao.committedTransactions[1].type)
         assertEquals(12_000L, dao.committedTransactions[1].amount)
+        assertEquals(1L, dao.committedTransactions[1].transferParentId)
     }
 
     @Test
