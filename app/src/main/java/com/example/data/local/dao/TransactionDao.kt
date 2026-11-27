@@ -81,6 +81,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id LIMIT 1")
     suspend fun getByIdSync(id: Long): TransactionEntity?
 
+    @Query("SELECT * FROM transactions WHERE transferParentId = :parentTransferId ORDER BY id")
+    suspend fun getLinkedTransferFees(parentTransferId: Long): List<TransactionEntity>
+
     @Query("""
         SELECT 
           t.*,
