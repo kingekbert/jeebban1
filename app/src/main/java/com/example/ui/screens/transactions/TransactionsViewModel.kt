@@ -11,12 +11,14 @@ import com.example.data.local.relation.TransactionWithDetails
 import com.example.data.repository.AccountRepository
 import com.example.data.repository.CategoryRepository
 import com.example.data.repository.TransactionRepository
+import com.example.data.repository.DeletedTransactionSnapshot
 import com.example.util.JalaliDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.ZoneId
 
@@ -90,7 +92,8 @@ class TransactionsViewModel(
     private val _zoomLevel = MutableStateFlow(1.0f)
     private val _onlyBookmarked = MutableStateFlow(false)
 
-    private var recentlyDeletedTransaction: TransactionEntity? = null
+    private var recentlyDeletedSnapshot: DeletedTransactionSnapshot? = null
+    private var deleteJob: Job? = null
 
     val uiState: StateFlow<TransactionsUiState> = combine(
         transactionRepository.allTransactionsWithDetails,
@@ -374,17 +377,20 @@ class TransactionsViewModel(
     }
 
     fun deleteTransaction(transaction: TransactionEntity) {
-        recentlyDeletedTransaction = transaction
-        viewModelScope.launch {
-            transactionRepository.deleteTransaction(transaction)
+        recentlyDeletedSnapshot = null
+        deleteJob = viewModelScope.launch {
+            recentlyDeletedSnapshot = transactionRepository.deleteTransactionWithUndoSnapshot(transaction)
         }
     }
 
     fun undoDelete() {
-        recentlyDeletedTransaction?.let { deleted ->
-            viewModelScope.launch {
-                transactionRepository.insertTransaction(deleted)
-                recentlyDeletedTransaction = null
+        val pendingDelete = deleteJob
+        viewModelScope.launch {
+            pendingDelete?.join()
+            recentlyDeletedSnapshot?.let { snapshot ->
+                transactionRepository.restoreDeletedTransaction(snapshot)
+                recentlyDeletedSnapshot = null
+                deleteJob = null
             }
         }
     }
