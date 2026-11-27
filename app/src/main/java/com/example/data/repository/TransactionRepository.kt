@@ -3,6 +3,10 @@ package com.example.data.repository
 import androidx.room.withTransaction
 import com.example.data.local.FinTrackDatabase
 import com.example.data.local.dao.TransactionDao
+import com.example.data.local.entity.GroupExpenseEntity
+import com.example.data.local.entity.GroupExpenseShareEntity
+import com.example.data.local.entity.SavingsGoalEntryEntity
+import com.example.data.local.relation.GroupExpenseWithShares
 import com.example.data.local.entity.TransactionEntity
 import com.example.data.local.entity.TransactionType
 import com.example.data.local.relation.TransactionWithDetails
@@ -17,6 +21,13 @@ import kotlinx.coroutines.withContext
 class DuplicateSmsTransactionException(
     message: String = "این پیامک قبلاً ثبت شده است"
 ) : IllegalStateException(message)
+
+data class DeletedTransactionSnapshot(
+    val transaction: TransactionEntity,
+    val groupExpense: GroupExpenseWithShares?,
+    val linkedSavingsEntries: List<SavingsGoalEntryEntity>,
+    val sharesSettledByTransaction: List<GroupExpenseShareEntity>
+)
 
 data class TransferInsertResult(
     val transferId: Long,
@@ -166,6 +177,57 @@ class TransactionRepository(
     suspend fun deleteTransaction(transaction: TransactionEntity) = withContext(Dispatchers.IO) {
         transactionDao.delete(transaction)
     }
+
+    /**
+     * Captures child records that Room cascades/nullifies when the transaction is deleted.
+     * This snapshot is used by the transaction-list undo action.
+     */
+    suspend fun deleteTransactionWithUndoSnapshot(transaction: TransactionEntity): DeletedTransactionSnapshot =
+        withContext(Dispatchers.IO) {
+            val db = database ?: throw IllegalStateException("Database required for reversible transaction deletion")
+            db.withTransaction {
+                val groupExpense = db.groupExpenseDao().getByTransactionId(transaction.id)
+                val savingsEntries = db.savingsGoalDao().getEntriesLinkedToTransaction(transaction.id)
+                val settledShares = db.groupExpenseDao().getSharesSettledByTransaction(transaction.id)
+                transactionDao.deleteById(transaction.id)
+                DeletedTransactionSnapshot(transaction, groupExpense, savingsEntries, settledShares)
+            }
+        }
+
+    suspend fun restoreDeletedTransaction(snapshot: DeletedTransactionSnapshot): Long =
+        withContext(Dispatchers.IO) {
+            val db = database ?: throw IllegalStateException("Database required for transaction restore")
+            db.withTransaction {
+                val restoredId = transactionDao.insert(snapshot.transaction)
+                if (restoredId <= 0L) throw IllegalStateException("Failed to restore transaction")
+                snapshot.groupExpense?.let { saved ->
+                    val newGroupId = db.groupExpenseDao().insertGroupExpense(
+                        saved.groupExpense.copy(id = 0L, transactionId = restoredId)
+                    )
+                    if (newGroupId <= 0L) throw IllegalStateException("Failed to restore group expense")
+                    val restoredShares = saved.shares.map { it.copy(id = 0L, groupExpenseId = newGroupId) }
+                    if (restoredShares.isNotEmpty()) {
+                        val ids = db.groupExpenseDao().insertShares(restoredShares)
+                        if (ids.size != restoredShares.size || ids.any { it <= 0L }) {
+                            throw IllegalStateException("Failed to restore group expense shares")
+                        }
+                    }
+                }
+                if (snapshot.linkedSavingsEntries.isNotEmpty()) {
+                    val restoredEntries = snapshot.linkedSavingsEntries.map {
+                        it.copy(id = 0L, transactionId = restoredId)
+                    }
+                    restoredEntries.forEach { entry ->
+                        val id = db.savingsGoalDao().insertEntry(entry)
+                        if (id <= 0L) throw IllegalStateException("Failed to restore savings entry")
+                    }
+                }
+                snapshot.sharesSettledByTransaction.forEach { share ->
+                    db.groupExpenseDao().updateShare(share.copy(settledTransactionId = restoredId))
+                }
+                restoredId
+            }
+        }
 
     suspend fun updateBookmark(id: Long, isBookmarked: Boolean) = withContext(Dispatchers.IO) {
         transactionDao.updateBookmark(id, isBookmarked)
