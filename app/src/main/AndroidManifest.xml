@@ -64,17 +64,15 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.example.widget.ACTION_TRIGGER_SCAN" />
-                <action android:name="com.example.widget.ACTION_ITEM_CLICK" />
-                <action android:name="com.example.widget.ACTION_REGISTER_ITEM" />
-                <action android:name="com.example.widget.ACTION_SWITCH_CATEGORY_PAGE" />
-                <action android:name="com.example.widget.ACTION_NEXT_TX" />
-                <action android:name="com.example.widget.ACTION_PREV_TX" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/sms_scan_widget_info" />
         </receiver>
+
+        <receiver
+            android:name=".widget.WidgetActionReceiver"
+            android:exported="false" />
 
         <service
             android:name=".widget.WidgetScanService"
