@@ -3,6 +3,9 @@ package com.example.data.repository
 import androidx.room.withTransaction
 import com.example.data.local.FinTrackDatabase
 import com.example.data.local.dao.TransactionDao
+import com.example.data.local.entity.SavingsGoalEntryEntity
+import com.example.data.local.entity.GroupExpenseShareEntity
+import com.example.data.local.relation.GroupExpenseWithShares
 import com.example.data.local.entity.TransactionEntity
 import com.example.data.local.entity.TransactionType
 import com.example.data.local.relation.TransactionWithDetails
@@ -17,6 +20,15 @@ import kotlinx.coroutines.withContext
 class DuplicateSmsTransactionException(
     message: String = "این پیامک قبلاً ثبت شده است"
 ) : IllegalStateException(message)
+
+data class DeletedTransactionSnapshot(
+    val transaction: TransactionEntity,
+    val groupExpense: GroupExpenseWithShares?,
+    val linkedSavingsEntries: List<SavingsGoalEntryEntity>,
+    val linkedDebts: List<com.example.data.local.entity.DebtEntity>,
+    val linkedTransferFees: List<TransactionEntity>,
+    val sharesSettledByTransaction: List<GroupExpenseShareEntity>
+)
 
 data class TransferInsertResult(
     val transferId: Long,
@@ -141,7 +153,7 @@ class TransactionRepository(
             }
 
             val feeId = if (feeTransaction != null) {
-                val insertedFeeId = transactionDao.insert(feeTransaction)
+                val insertedFeeId = transactionDao.insert(feeTransaction.copy(transferParentId = transferId))
                 if (insertedFeeId <= 0L) {
                     throw IllegalStateException("خطا در ثبت تراکنش کارمزد")
                 }
@@ -160,12 +172,136 @@ class TransactionRepository(
     suspend fun insert(transaction: TransactionEntity): Long = insertTransaction(transaction)
 
     suspend fun updateTransaction(transaction: TransactionEntity) = withContext(Dispatchers.IO) {
-        transactionDao.update(transaction)
+        val db = database ?: run {
+            transactionDao.update(transaction)
+            return@withContext
+        }
+        db.withTransaction {
+            val original = transactionDao.getByIdSync(transaction.id)
+                ?: throw IllegalStateException("تراکنش برای ویرایش یافت نشد")
+            val linkedSavings = db.savingsGoalDao().getEntriesLinkedToTransaction(transaction.id)
+            val linkedDebts = db.debtDao().getByTransactionId(transaction.id)
+            val groupExpense = db.groupExpenseDao().getByTransactionId(transaction.id)
+
+            if (linkedSavings.isNotEmpty()) {
+                if (linkedSavings.size != 1) {
+                    throw IllegalStateException("این تراکنش به چند رکورد پس‌انداز متصل است و ویرایش آن امن نیست")
+                }
+                val expectedType = when (linkedSavings.single().type) {
+                    com.example.data.local.entity.SavingsEntryType.DEPOSIT -> TransactionType.EXPENSE
+                    com.example.data.local.entity.SavingsEntryType.WITHDRAW -> TransactionType.INCOME
+                }
+                if (transaction.type != expectedType) {
+                    throw IllegalArgumentException("نوع تراکنش مرتبط با پس‌انداز را نمی‌توان تغییر داد")
+                }
+            }
+
+            if (linkedDebts.isNotEmpty()) {
+                val expectedType = when (linkedDebts.first().type) {
+                    com.example.data.local.entity.DebtType.OWED_TO_ME -> TransactionType.EXPENSE
+                    com.example.data.local.entity.DebtType.I_OWE -> TransactionType.INCOME
+                }
+                if (transaction.type != expectedType) {
+                    throw IllegalArgumentException("نوع تراکنش مرتبط با بدهی را نمی‌توان تغییر داد")
+                }
+            }
+
+            if (groupExpense != null) {
+                if (transaction.type != TransactionType.EXPENSE) {
+                    throw IllegalArgumentException("تراکنش هزینه مشترک باید از نوع هزینه باقی بماند")
+                }
+                val totalShares = groupExpense.shares.sumOf { it.amount }
+                if (transaction.amount < totalShares) {
+                    throw IllegalArgumentException("مبلغ تراکنش از مجموع سهم‌های ثبت‌شده کمتر است")
+                }
+            }
+
+            // Editing visible fields must not detach SMS identity or recurring history.
+            val preserved = transaction.copy(
+                smsHash = original.smsHash,
+                recurringId = original.recurringId,
+                executedForDate = original.executedForDate,
+                createdAt = original.createdAt,
+                transferParentId = original.transferParentId
+            )
+            transactionDao.update(preserved)
+
+            linkedSavings.singleOrNull()?.let { entry ->
+                db.savingsGoalDao().updateEntry(entry.copy(amount = transaction.amount, date = transaction.date))
+            }
+            linkedDebts.forEach { debt ->
+                db.debtDao().update(debt.copy(amount = transaction.amount, createdAt = transaction.date, note = transaction.note))
+            }
+        }
     }
 
     suspend fun deleteTransaction(transaction: TransactionEntity) = withContext(Dispatchers.IO) {
         transactionDao.delete(transaction)
     }
+
+    /**
+     * Captures child records that Room cascades/nullifies when the transaction is deleted.
+     * This snapshot is used by the transaction-list undo action.
+     */
+    suspend fun deleteTransactionWithUndoSnapshot(transaction: TransactionEntity): DeletedTransactionSnapshot =
+        withContext(Dispatchers.IO) {
+            val db = database ?: throw IllegalStateException("Database required for reversible transaction deletion")
+            db.withTransaction {
+                val groupExpense = db.groupExpenseDao().getByTransactionId(transaction.id)
+                val savingsEntries = db.savingsGoalDao().getEntriesLinkedToTransaction(transaction.id)
+                val linkedDebts = db.debtDao().getByTransactionId(transaction.id)
+                val linkedTransferFees = transactionDao.getLinkedTransferFees(transaction.id)
+                val settledShares = db.groupExpenseDao().getSharesSettledByTransaction(transaction.id)
+                settledShares.forEach { share ->
+                    db.groupExpenseDao().updateShare(share.copy(isSettled = false, settledTransactionId = null))
+                }
+                transactionDao.deleteById(transaction.id)
+                DeletedTransactionSnapshot(transaction, groupExpense, savingsEntries, linkedDebts, linkedTransferFees, settledShares)
+            }
+        }
+
+    suspend fun restoreDeletedTransaction(snapshot: DeletedTransactionSnapshot): Long =
+        withContext(Dispatchers.IO) {
+            val db = database ?: throw IllegalStateException("Database required for transaction restore")
+            db.withTransaction {
+                val restoredId = transactionDao.insert(snapshot.transaction)
+                if (restoredId <= 0L) throw IllegalStateException("Failed to restore transaction")
+                snapshot.groupExpense?.let { saved ->
+                    val newGroupId = db.groupExpenseDao().insertGroupExpense(
+                        saved.groupExpense.copy(id = 0L, transactionId = restoredId)
+                    )
+                    if (newGroupId <= 0L) throw IllegalStateException("Failed to restore group expense")
+                    val restoredShares = saved.shares.map { it.copy(id = 0L, groupExpenseId = newGroupId) }
+                    if (restoredShares.isNotEmpty()) {
+                        val ids = db.groupExpenseDao().insertShares(restoredShares)
+                        if (ids.size != restoredShares.size || ids.any { it <= 0L }) {
+                            throw IllegalStateException("Failed to restore group expense shares")
+                        }
+                    }
+                }
+                snapshot.linkedDebts.forEach { debt ->
+                    val debtId = db.debtDao().insert(debt)
+                    if (debtId <= 0L) throw IllegalStateException("Failed to restore linked debt")
+                }
+                snapshot.linkedTransferFees.forEach { fee ->
+                    val feeId = transactionDao.insert(fee.copy(transferParentId = restoredId))
+                    if (feeId <= 0L) throw IllegalStateException("Failed to restore linked transfer fee")
+                }
+                if (snapshot.linkedSavingsEntries.isNotEmpty()) {
+                    val restoredEntries = snapshot.linkedSavingsEntries.map {
+                        it.copy(id = 0L, transactionId = restoredId)
+                    }
+                    restoredEntries.forEach { entry ->
+                        val id = db.savingsGoalDao().insertEntry(entry)
+                        if (id <= 0L) throw IllegalStateException("Failed to restore savings entry")
+                    }
+                }
+                snapshot.sharesSettledByTransaction.forEach { share ->
+                    db.groupExpenseDao().updateShare(share.copy(settledTransactionId = restoredId))
+                }
+                restoredId
+            }
+        }
 
     suspend fun updateBookmark(id: Long, isBookmarked: Boolean) = withContext(Dispatchers.IO) {
         transactionDao.updateBookmark(id, isBookmarked)

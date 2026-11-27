@@ -1,6 +1,8 @@
 package com.example.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class DebtType {
@@ -8,7 +10,18 @@ enum class DebtType {
     I_OWE       // بدهی‌های من
 }
 
-@Entity(tableName = "debts")
+@Entity(
+    tableName = "debts",
+    foreignKeys = [
+        ForeignKey(
+            entity = TransactionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["transactionId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("transactionId")]
+)
 data class DebtEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -19,5 +32,6 @@ data class DebtEntity(
     val note: String? = null,
     val isSettled: Boolean = false,
     val settledDate: Long? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val transactionId: Long? = null
 )

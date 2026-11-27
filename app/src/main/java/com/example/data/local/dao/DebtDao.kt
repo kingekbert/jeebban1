@@ -30,6 +30,9 @@ interface DebtDao {
     @Query("SELECT * FROM debts WHERE id = :id")
     fun getById(id: Long): Flow<DebtEntity?>
 
+    @Query("SELECT * FROM debts WHERE transactionId = :transactionId")
+    suspend fun getByTransactionId(transactionId: Long): List<DebtEntity>
+
     @Query("SELECT COALESCE(SUM(amount), 0) FROM debts WHERE type = 'OWED_TO_ME' AND isSettled = 0")
     fun getTotalOwedToMe(): Flow<Long>
 

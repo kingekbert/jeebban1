@@ -35,7 +35,7 @@ class AddTransactionUseCase(
             val id = transactionRepository.insertTransaction(transaction)
 
             // Auto-sync Debt / Loan (بدهی و طلب)
-            syncDebtLoanIfApplicable(transaction)
+            syncDebtLoanIfApplicable(transaction.copy(id = id))
 
             Result.success(id)
         } catch (e: CancellationException) {
@@ -130,7 +130,7 @@ class AddTransactionUseCase(
                 shareMode = shareMode,
                 shares = shares
             )
-            syncDebtLoanIfApplicable(expenseTransaction)
+            syncDebtLoanIfApplicable(expenseTransaction.copy(id = result.transactionId))
             Result.success(result)
         } catch (e: CancellationException) {
             throw e
@@ -161,7 +161,8 @@ class AddTransactionUseCase(
                     type = DebtType.OWED_TO_ME,
                     amount = transaction.amount,
                     note = transaction.note?.ifBlank { "ثبت خودکار از تراکنش قرض دادن" } ?: "ثبت خودکار از تراکنش قرض دادن",
-                    createdAt = transaction.date
+                    createdAt = transaction.date,
+                    transactionId = transaction.id
                 )
                 dRepo.insertDebt(debt)
             } else if (isBorrowing) {
@@ -172,7 +173,8 @@ class AddTransactionUseCase(
                     type = DebtType.I_OWE,
                     amount = transaction.amount,
                     note = transaction.note?.ifBlank { "ثبت خودکار از تراکنش قرض گرفتن" } ?: "ثبت خودکار از تراکنش قرض گرفتن",
-                    createdAt = transaction.date
+                    createdAt = transaction.date,
+                    transactionId = transaction.id
                 )
                 dRepo.insertDebt(debt)
             }

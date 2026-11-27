@@ -106,6 +106,8 @@ class AtomicGroupExpenseTest {
             override fun getAllWithDetails(): Flow<List<TransactionWithDetails>> = emptyFlow()
             override fun getByIdWithDetails(id: Long): Flow<TransactionWithDetails?> = emptyFlow()
             override fun getById(id: Long): Flow<TransactionEntity?> = emptyFlow()
+            override suspend fun getByIdSync(id: Long): TransactionEntity? = (stagedTransactions ?: committedTransactions).find { it.id == id }
+            override suspend fun getLinkedTransferFees(parentTransferId: Long): List<TransactionEntity> = emptyList()
             override fun getRecent(limit: Int): Flow<List<TransactionWithDetails>> = emptyFlow()
             override fun getByAccount(accountId: Long): Flow<List<TransactionWithDetails>> = emptyFlow()
             override fun getByDateRange(start: Long, end: Long): Flow<List<TransactionWithDetails>> = emptyFlow()
@@ -164,6 +166,7 @@ class AtomicGroupExpenseTest {
             override fun observeByTransactionId(transactionId: Long): Flow<GroupExpenseWithShares?> = emptyFlow()
             override suspend fun getById(id: Long): GroupExpenseWithShares? = null
             override suspend fun getShareById(shareId: Long): GroupExpenseShareEntity? = null
+            override suspend fun getSharesSettledByTransaction(transactionId: Long): List<GroupExpenseShareEntity> = emptyList()
             override suspend fun getOpenSharesByAmount(amount: Long): List<GroupExpenseShareEntity> = emptyList()
             override suspend fun getAllOpenShares(): List<GroupExpenseShareEntity> = emptyList()
             override fun getRecentPersonNames(): Flow<List<String>> = emptyFlow()
