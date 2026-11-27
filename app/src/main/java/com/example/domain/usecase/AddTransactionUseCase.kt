@@ -173,7 +173,8 @@ class AddTransactionUseCase(
                     type = DebtType.I_OWE,
                     amount = transaction.amount,
                     note = transaction.note?.ifBlank { "ثبت خودکار از تراکنش قرض گرفتن" } ?: "ثبت خودکار از تراکنش قرض گرفتن",
-                    createdAt = transaction.date
+                    createdAt = transaction.date,
+                    transactionId = transaction.id
                 )
                 dRepo.insertDebt(debt)
             }
