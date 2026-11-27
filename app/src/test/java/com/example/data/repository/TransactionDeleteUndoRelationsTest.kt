@@ -6,6 +6,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.data.local.FinTrackDatabase
 import com.example.data.local.entity.AccountEntity
 import com.example.data.local.entity.AccountType
+import com.example.data.local.entity.DebtEntity
+import com.example.data.local.entity.DebtType
 import com.example.data.local.entity.GroupExpenseEntity
 import com.example.data.local.entity.GroupExpenseShareEntity
 import com.example.data.local.entity.GroupExpenseShareMode
@@ -47,6 +49,9 @@ class TransactionDeleteUndoRelationsTest {
         val target = database.transactionDao().insert(
             TransactionEntity(type = TransactionType.EXPENSE, amount = 500L, accountId = accountId, date = 100L, note = "group meal")
         )
+        database.debtDao().insert(
+            DebtEntity(personName = "Friend", type = DebtType.OWED_TO_ME, amount = 500L, transactionId = target, createdAt = 100L)
+        )
         val settlement = database.transactionDao().insert(
             TransactionEntity(type = TransactionType.INCOME, amount = 200L, accountId = accountId, date = 200L, note = "settlement")
         )
@@ -78,6 +83,7 @@ class TransactionDeleteUndoRelationsTest {
         assertNull(database.transactionDao().getById(target).first())
         assertNull(database.groupExpenseDao().getByTransactionId(target))
         assertEquals(0, database.savingsGoalDao().getEntriesLinkedToTransaction(target).size)
+        assertEquals(0, database.debtDao().getByTransactionId(target).size)
         val deletedExternalShare = database.groupExpenseDao().getShareById(externallySettledShareId)
         assertNull(deletedExternalShare?.settledTransactionId)
         assertEquals(false, deletedExternalShare?.isSettled)
@@ -140,6 +146,25 @@ class TransactionDeleteUndoRelationsTest {
         assertEquals(entryId, entry.id)
         assertEquals(250L, entry.amount)
         assertEquals(200L, entry.date)
+    }
+
+    @Test
+    fun `editing linked debt amount and date follows transaction`() = runTest {
+        val accountId = database.accountDao().insert(
+            AccountEntity(name = "Test", type = AccountType.CASH, initialBalance = 0, color = 0, icon = "wallet")
+        )
+        val txId = database.transactionDao().insert(
+            TransactionEntity(type = TransactionType.EXPENSE, amount = 150L, accountId = accountId, date = 300L)
+        )
+        val debtId = database.debtDao().insert(
+            DebtEntity(personName = "Friend", type = DebtType.OWED_TO_ME, amount = 150L, transactionId = txId, createdAt = 300L)
+        )
+        repository.updateTransaction(
+            TransactionEntity(id = txId, type = TransactionType.EXPENSE, amount = 400L, accountId = accountId, date = 450L)
+        )
+        val debt = database.debtDao().getById(debtId).first()!!
+        assertEquals(400L, debt.amount)
+        assertEquals(450L, debt.createdAt)
     }
 
     @Test
