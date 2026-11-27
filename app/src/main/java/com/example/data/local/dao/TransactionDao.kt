@@ -78,6 +78,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id")
     fun getById(id: Long): Flow<TransactionEntity?>
 
+    @Query("SELECT * FROM transactions WHERE id = :id LIMIT 1")
+    suspend fun getByIdSync(id: Long): TransactionEntity?
+
     @Query("""
         SELECT 
           t.*,
