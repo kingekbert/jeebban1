@@ -5,6 +5,7 @@ import com.example.data.local.dao.TransactionDao
 import com.example.data.local.entity.TransactionEntity
 import com.example.data.local.entity.TransactionType
 import com.example.data.local.relation.TransactionWithDetails
+import com.example.data.repository.DuplicateSmsTransactionException
 import com.example.data.repository.TransactionRepository
 import com.example.data.repository.TransferInsertResult
 import kotlinx.coroutines.flow.Flow
@@ -103,7 +104,8 @@ class AtomicTransferWithFeeTest {
     private fun sampleTransfer(
         amount: Long = 5_000_000L,
         fromAccountId: Long = 1L,
-        toAccountId: Long = 2L
+        toAccountId: Long = 2L,
+        smsHash: String? = "hash_w|hash_d"
     ) = TransactionEntity(
         type = TransactionType.TRANSFER,
         amount = amount,
@@ -111,7 +113,7 @@ class AtomicTransferWithFeeTest {
         toAccountId = toAccountId,
         date = 1_700_000_000_000L,
         note = "انتقال بین حساب‌ها",
-        smsHash = "hash_w|hash_d"
+        smsHash = smsHash
     )
 
     private fun sampleFee(
@@ -275,4 +277,31 @@ class AtomicTransferWithFeeTest {
         assertTrue(dao.attemptedInserts.isEmpty())
         assertTrue(dao.committedTransactions.isEmpty())
     }
+    @Test
+    fun `duplicate transfer SMS hash rejects atomic transfer and optional fee before insertion`() = runTest {
+        val existingWithdrawalHash = "hash_w"
+        val existingDepositHash = "hash_d"
+
+        for (conflictingHash in listOf(existingWithdrawalHash, existingDepositHash)) {
+            val dao = TransactionalFakeTransactionDao()
+            dao.committedTransactions.add(
+                sampleTransfer().copy(id = 99L, smsHash = conflictingHash)
+            )
+            val useCase = buildUseCase(dao)
+
+            val result = useCase.addTransferWithOptionalFee(
+                transferTransaction = sampleTransfer(smsHash = "$existingWithdrawalHash|$existingDepositHash"),
+                feeTransaction = sampleFee()
+            )
+
+            assertTrue(result.isFailure)
+            assertTrue(result.exceptionOrNull() is DuplicateSmsTransactionException)
+            assertEquals(1, dao.transactionCount)
+            assertEquals(1, dao.rollbackCount)
+            assertTrue("Neither transfer nor fee should be attempted", dao.attemptedInserts.isEmpty())
+            assertEquals(1, dao.committedTransactions.size)
+            assertEquals(conflictingHash, dao.committedTransactions.single().smsHash)
+        }
+    }
+
 }
