@@ -46,6 +46,12 @@ object WidgetQuickRegister {
         try {
             val app = context.applicationContext as? FinTrackApp
             val appModule = app?.appModule ?: com.example.di.AppModule(context.applicationContext)
+            if (appModule.appLockRepository.lockEnabled.value &&
+                appModule.appLockRepository.locked.value
+            ) {
+                showErrorToast(context)
+                return@withContext
+            }
 
             // 0. Guard against duplicate registration across app/widget paths
             if (appModule.transactionRepository.isSmsHashRegistered(smsHash)) {
