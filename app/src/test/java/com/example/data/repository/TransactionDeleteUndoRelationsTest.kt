@@ -78,7 +78,9 @@ class TransactionDeleteUndoRelationsTest {
         assertNull(database.transactionDao().getById(target).first())
         assertNull(database.groupExpenseDao().getByTransactionId(target))
         assertEquals(0, database.savingsGoalDao().getEntriesLinkedToTransaction(target).size)
-        assertNull(database.groupExpenseDao().getShareById(externallySettledShareId)?.settledTransactionId)
+        val deletedExternalShare = database.groupExpenseDao().getShareById(externallySettledShareId)
+        assertNull(deletedExternalShare?.settledTransactionId)
+        assertEquals(false, deletedExternalShare?.isSettled)
 
         val restoredId = repository.restoreDeletedTransaction(deletedSnapshot)
         assertEquals(target, restoredId)
@@ -93,5 +95,74 @@ class TransactionDeleteUndoRelationsTest {
         val restoredExternalShare = database.groupExpenseDao().getShareById(externallySettledShareId)
         assertNotNull(restoredExternalShare)
         assertEquals(restoredId, restoredExternalShare!!.settledTransactionId)
+        assertEquals(true, restoredExternalShare.isSettled)
+    }
+
+    @Test
+    fun `editing linked transaction preserves sms and recurring metadata and syncs savings entry`() = runTest {
+        val accountId = database.accountDao().insert(
+            AccountEntity(name = "Test", type = AccountType.CASH, initialBalance = 0, color = 0, icon = "wallet")
+        )
+        val txId = database.transactionDao().insert(
+            TransactionEntity(
+                type = TransactionType.EXPENSE,
+                amount = 100L,
+                accountId = accountId,
+                date = 100L,
+                smsHash = "unique-sms-hash",
+                recurringId = 77L,
+                executedForDate = 88L,
+                createdAt = 99L
+            )
+        )
+        val goalId = database.savingsGoalDao().insert(SavingsGoalEntity(title = "Goal", targetAmount = 1000L))
+        val entryId = database.savingsGoalDao().insertEntry(
+            SavingsGoalEntryEntity(goalId = goalId, transactionId = txId, amount = 100L, type = SavingsEntryType.DEPOSIT, date = 100L)
+        )
+
+        repository.updateTransaction(
+            TransactionEntity(
+                id = txId,
+                type = TransactionType.EXPENSE,
+                amount = 250L,
+                accountId = accountId,
+                date = 200L,
+                note = "edited"
+            )
+        )
+
+        val saved = database.transactionDao().getById(txId).first()!!
+        assertEquals("unique-sms-hash", saved.smsHash)
+        assertEquals(77L, saved.recurringId)
+        assertEquals(88L, saved.executedForDate)
+        assertEquals(99L, saved.createdAt)
+        val entry = database.savingsGoalDao().getEntriesLinkedToTransaction(txId).single()
+        assertEquals(entryId, entry.id)
+        assertEquals(250L, entry.amount)
+        assertEquals(200L, entry.date)
+    }
+
+    @Test
+    fun `editing linked savings transaction to income is rejected`() = runTest {
+        val accountId = database.accountDao().insert(
+            AccountEntity(name = "Test", type = AccountType.CASH, initialBalance = 0, color = 0, icon = "wallet")
+        )
+        val txId = database.transactionDao().insert(
+            TransactionEntity(type = TransactionType.EXPENSE, amount = 100L, accountId = accountId, date = 100L)
+        )
+        val goalId = database.savingsGoalDao().insert(SavingsGoalEntity(title = "Goal", targetAmount = 1000L))
+        database.savingsGoalDao().insertEntry(
+            SavingsGoalEntryEntity(goalId = goalId, transactionId = txId, amount = 100L, type = SavingsEntryType.DEPOSIT, date = 100L)
+        )
+
+        try {
+            repository.updateTransaction(
+                TransactionEntity(id = txId, type = TransactionType.INCOME, amount = 100L, accountId = accountId, date = 100L)
+            )
+            throw AssertionError("Expected invalid linked transaction type to be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertEquals("نوع تراکنش مرتبط با پس‌انداز را نمی‌توان تغییر داد", expected.message)
+        }
+        assertEquals(TransactionType.EXPENSE, database.transactionDao().getById(txId).first()!!.type)
     }
 }
