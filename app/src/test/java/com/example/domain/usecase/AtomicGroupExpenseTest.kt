@@ -107,6 +107,7 @@ class AtomicGroupExpenseTest {
             override fun getByIdWithDetails(id: Long): Flow<TransactionWithDetails?> = emptyFlow()
             override fun getById(id: Long): Flow<TransactionEntity?> = emptyFlow()
             override suspend fun getByIdSync(id: Long): TransactionEntity? = (stagedTransactions ?: committedTransactions).find { it.id == id }
+            override suspend fun getLinkedTransferFees(parentTransferId: Long): List<TransactionEntity> = emptyList()
             override fun getRecent(limit: Int): Flow<List<TransactionWithDetails>> = emptyFlow()
             override fun getByAccount(accountId: Long): Flow<List<TransactionWithDetails>> = emptyFlow()
             override fun getByDateRange(start: Long, end: Long): Flow<List<TransactionWithDetails>> = emptyFlow()
