@@ -525,10 +525,10 @@ fun SettingsScreen(
                             showRestoreOptionsDialog = false
                             try {
                                 openDocumentLauncher.launch(arrayOf("*/*"))
-                            } catch (e: Exception) {
+                            } catch (e: android.content.ActivityNotFoundException) {
                                 try {
                                     getContentFallbackLauncher.launch("*/*")
-                                } catch (e2: Exception) {
+                                } catch (e2: android.content.ActivityNotFoundException) {
                                     try {
                                         val fallbackIntent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
                                             type = "*/*"
@@ -536,7 +536,7 @@ fun SettingsScreen(
                                         chooserFallbackLauncher.launch(
                                             android.content.Intent.createChooser(fallbackIntent, "انتخاب فایل پشتیبان")
                                         )
-                                    } catch (e3: Exception) {
+                                    } catch (e3: android.content.ActivityNotFoundException) {
                                         Toast.makeText(
                                             context,
                                             "برنامه مدیریت فایل یافت نشد. می‌توانید متن فایل را مستقیماً وارد کنید.",
@@ -545,6 +545,12 @@ fun SettingsScreen(
                                         showPasteJsonDialog = true
                                     }
                                 }
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "خطا در باز کردن انتخابگر فایل: ${e.message}",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),

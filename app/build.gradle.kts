@@ -80,6 +80,7 @@ dependencies {
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
+  implementation(libs.androidx.fragment.ktx)
   implementation("androidx.biometric:biometric:1.1.0")
   implementation("com.google.code.gson:gson:2.11.0")
   coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
