@@ -74,20 +74,37 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val app = application as FinTrackApp
+        val appModule = app.appModule
+        if (appModule.appLockRepository.lockEnabled.value &&
+            appModule.appLockRepository.locked.value
+        ) {
+            startActivity(Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            })
+            finish()
+            return
+        }
+
         val smsHash = intent.getStringExtra("extra_sms_hash") ?: run {
             finish()
             return
         }
-        val amount = intent.getLongExtra("extra_amount", 0L)
-        val typeStr = intent.getStringExtra("extra_type") ?: TransactionType.EXPENSE.name
-        val txType = try { TransactionType.valueOf(typeStr) } catch (e: Exception) { TransactionType.EXPENSE }
-        val date = intent.getLongExtra("extra_date", System.currentTimeMillis())
-        val bankName = intent.getStringExtra("extra_bank_name") ?: ""
-        val accountIdent = intent.getStringExtra("extra_account_ident") ?: ""
-        val note = intent.getStringExtra("extra_note") ?: ""
-
-        val app = application as FinTrackApp
-        val appModule = app.appModule
+        val sourceItem = WidgetDataStore.getItems(this).firstOrNull { it.smsHash == smsHash } ?: run {
+            finish()
+            return
+        }
+        val parsed = sourceItem.parsedSms
+        val amount = parsed.amount ?: 0L
+        if (amount <= 0L) {
+            finish()
+            return
+        }
+        val txType = parsed.transactionType ?: TransactionType.EXPENSE
+        val date = parsed.date ?: sourceItem.date
+        val bankName = parsed.bankName ?: ""
+        val accountIdent = parsed.accountIdentifier ?: ""
+        val note = parsed.rawDescription?.ifBlank { sourceItem.rawText } ?: sourceItem.rawText
 
         setContent {
             val themeMode = appModule.settingsRepository.themeMode
