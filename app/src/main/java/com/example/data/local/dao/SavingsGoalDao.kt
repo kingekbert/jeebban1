@@ -44,6 +44,9 @@ interface SavingsGoalDao {
     @Query("SELECT * FROM savings_goal_entries WHERE goalId = :goalId ORDER BY date DESC")
     fun getEntriesForGoal(goalId: Long): Flow<List<SavingsGoalEntryEntity>>
 
+    @Query("SELECT * FROM savings_goal_entries WHERE transactionId = :transactionId")
+    suspend fun getEntriesLinkedToTransaction(transactionId: Long): List<SavingsGoalEntryEntity>
+
     @Query("SELECT * FROM savings_goal_entries ORDER BY date DESC")
     fun getAllEntries(): Flow<List<SavingsGoalEntryEntity>>
 
