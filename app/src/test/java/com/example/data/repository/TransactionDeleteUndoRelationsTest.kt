@@ -105,6 +105,30 @@ class TransactionDeleteUndoRelationsTest {
     }
 
     @Test
+    fun `undo restores linked fee transaction with original ids and parent reference`() = runTest {
+        val accountId = database.accountDao().insert(
+            AccountEntity(name = "Test", type = AccountType.CASH, initialBalance = 0, color = 0, icon = "wallet")
+        )
+        val transferId = database.transactionDao().insert(
+            TransactionEntity(type = TransactionType.TRANSFER, amount = 10_000L, accountId = accountId, toAccountId = accountId + 1, date = 100L)
+        )
+        val feeId = database.transactionDao().insert(
+            TransactionEntity(type = TransactionType.EXPENSE, amount = 100L, accountId = accountId, date = 100L, note = "fee", transferParentId = transferId)
+        )
+
+        val snapshot = repository.deleteTransactionWithUndoSnapshot(database.transactionDao().getById(transferId).first()!!)
+        assertNull(database.transactionDao().getById(transferId).first())
+        assertNull(database.transactionDao().getById(feeId).first())
+
+        val restoredTransferId = repository.restoreDeletedTransaction(snapshot)
+        assertEquals(transferId, restoredTransferId)
+        val restoredFee = database.transactionDao().getById(feeId).first()!!
+        assertEquals(feeId, restoredFee.id)
+        assertEquals(restoredTransferId, restoredFee.transferParentId)
+        assertEquals(100L, restoredFee.amount)
+    }
+
+    @Test
     fun `editing linked transaction preserves sms and recurring metadata and syncs savings entry`() = runTest {
         val accountId = database.accountDao().insert(
             AccountEntity(name = "Test", type = AccountType.CASH, initialBalance = 0, color = 0, icon = "wallet")
