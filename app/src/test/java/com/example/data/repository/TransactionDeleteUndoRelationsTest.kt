@@ -109,8 +109,11 @@ class TransactionDeleteUndoRelationsTest {
         val accountId = database.accountDao().insert(
             AccountEntity(name = "Test", type = AccountType.CASH, initialBalance = 0, color = 0, icon = "wallet")
         )
+        val destinationId = database.accountDao().insert(
+            AccountEntity(name = "Destination", type = AccountType.CASH, initialBalance = 0, color = 0, icon = "wallet")
+        )
         val transferId = database.transactionDao().insert(
-            TransactionEntity(type = TransactionType.TRANSFER, amount = 10_000L, accountId = accountId, toAccountId = accountId + 1, date = 100L)
+            TransactionEntity(type = TransactionType.TRANSFER, amount = 10_000L, accountId = accountId, toAccountId = destinationId, date = 100L)
         )
         val feeId = database.transactionDao().insert(
             TransactionEntity(type = TransactionType.EXPENSE, amount = 100L, accountId = accountId, date = 100L, note = "fee", transferParentId = transferId)
