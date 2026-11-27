@@ -251,8 +251,6 @@ object WidgetStatusHelper {
         val isDark = isDarkThemeActive(context)
 
         // Fetch categories from DB
-        val app = context.applicationContext as? FinTrackApp
-        val appModule = app?.appModule ?: com.example.di.AppModule(context.applicationContext)
         val allCategories = runBlocking {
             try {
                 appModule.categoryRepository.allCategories.firstOrNull() ?: emptyList()
