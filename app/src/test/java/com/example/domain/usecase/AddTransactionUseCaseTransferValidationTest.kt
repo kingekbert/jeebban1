@@ -25,8 +25,8 @@ import org.robolectric.annotation.Config
 class AddTransactionUseCaseTransferValidationTest {
     private lateinit var database: FinTrackDatabase
     private lateinit var useCase: AddTransactionUseCase
-    private lateinit var sourceId: Long
-    private lateinit var destinationId: Long
+    private var sourceId: Long = 0L
+    private var destinationId: Long = 0L
 
     @Before
     fun setUp() = runBlocking {
