@@ -299,7 +299,7 @@ object WidgetStatusHelper {
             views.setOnClickPendingIntent(R.id.widget_header, appPendingIntent)
 
             // 2. Scan Button: 100% Background Scan via Broadcast
-            val scanIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+            val scanIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                 action = SmsScanWidgetProvider.ACTION_TRIGGER_SCAN
             }
             val scanPendingIntent = PendingIntent.getBroadcast(
@@ -356,7 +356,7 @@ object WidgetStatusHelper {
                     views.setTextColor(R.id.btn_widget_prev_tx, titleColor)
                     views.setTextColor(R.id.btn_widget_next_tx, titleColor)
 
-                    val prevIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                    val prevIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                         action = SmsScanWidgetProvider.ACTION_PREV_TX
                     }
                     val prevPendingIntent = PendingIntent.getBroadcast(
@@ -367,7 +367,7 @@ object WidgetStatusHelper {
                     )
                     views.setOnClickPendingIntent(R.id.btn_widget_prev_tx, prevPendingIntent)
 
-                    val nextIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                    val nextIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                         action = SmsScanWidgetProvider.ACTION_NEXT_TX
                     }
                     val nextPendingIntent = PendingIntent.getBroadcast(
@@ -423,7 +423,7 @@ object WidgetStatusHelper {
                         views.setInt(btnId, "setBackgroundResource", catBtnBg)
                         views.setTextColor(btnId, catBtnTextColor)
 
-                        val regIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                        val regIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                             action = SmsScanWidgetProvider.ACTION_REGISTER_ITEM
                             putExtra("widget_action", "REGISTER_CATEGORY")
                             putExtra("extra_sms_hash", currentItem.smsHash)
@@ -455,7 +455,7 @@ object WidgetStatusHelper {
                     views.setTextColor(R.id.btn_cat_page, moreBtnTextColor)
                     views.setTextViewText(R.id.btn_cat_page, if (effectivePage == 0) "◀" else "▶")
 
-                    val switchPageIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                    val switchPageIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                         action = SmsScanWidgetProvider.ACTION_SWITCH_CATEGORY_PAGE
                     }
                     val switchPagePi = PendingIntent.getBroadcast(
