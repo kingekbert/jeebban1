@@ -243,7 +243,11 @@ object WidgetStatusHelper {
         val items = WidgetDataStore.getItems(context)
         val newCount = items.size
         saveScanResult(context, newCount)
-        val statusText = formatWidgetStatusText(lastTime, newCount)
+        val app = context.applicationContext as? FinTrackApp
+        val appModule = app?.appModule ?: com.example.di.AppModule(context.applicationContext)
+        val isLocked = appModule.appLockRepository.lockEnabled.value &&
+            appModule.appLockRepository.locked.value
+        val statusText = if (isLocked) "برنامه قفل است" else formatWidgetStatusText(lastTime, newCount)
         val isDark = isDarkThemeActive(context)
 
         // Fetch categories from DB
@@ -278,7 +282,7 @@ object WidgetStatusHelper {
         val currentIndex = if (items.isNotEmpty()) {
             getCurrentTransactionIndex(context).coerceIn(0, items.size - 1)
         } else 0
-        val currentItem = items.getOrNull(currentIndex)
+        val currentItem = if (isLocked) null else items.getOrNull(currentIndex)
 
         for (appWidgetId in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_sms_scan)
@@ -498,7 +502,12 @@ object WidgetStatusHelper {
                 views.setViewVisibility(R.id.widget_card_flipper, View.GONE)
                 views.setViewVisibility(R.id.widget_empty_view, View.VISIBLE)
 
-                if (lastTime <= 0L) {
+                if (isLocked) {
+                    views.setTextViewText(R.id.widget_tv_empty_title, "برنامه قفل است 🔒")
+                    views.setTextColor(R.id.widget_tv_empty_title, emptyNormalColor)
+                    views.setTextViewText(R.id.widget_tv_empty_sub, "برای مشاهده اطلاعات مالی، ابتدا قفل برنامه را باز کنید.")
+                    views.setTextColor(R.id.widget_tv_empty_sub, statusColor)
+                } else if (lastTime <= 0L) {
                     views.setTextViewText(R.id.widget_tv_empty_title, "پیامک‌های بانکی ۷ روز اخیر")
                     views.setTextColor(R.id.widget_tv_empty_title, emptyNormalColor)
                     views.setTextViewText(R.id.widget_tv_empty_sub, "برای یافتن پیامک‌های ثبت‌نشده، دکمه «اسکن پیامک‌ها» را لمس کنید.")
