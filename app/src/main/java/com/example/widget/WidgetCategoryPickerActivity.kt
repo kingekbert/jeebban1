@@ -165,6 +165,15 @@ class WidgetCategoryPickerActivity : ComponentActivity() {
         val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
         scope.launch {
             try {
+                if (appModule.appLockRepository.lockEnabled.value &&
+                    appModule.appLockRepository.locked.value
+                ) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(this@WidgetCategoryPickerActivity, "ابتدا قفل برنامه را باز کنید", Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                    return@launch
+                }
                 if (appModule.transactionRepository.isSmsHashRegistered(smsHash)) {
                     handleDuplicateAndFinish(smsHash)
                     return@launch
