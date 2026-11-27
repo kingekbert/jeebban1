@@ -26,6 +26,7 @@ data class DeletedTransactionSnapshot(
     val groupExpense: GroupExpenseWithShares?,
     val linkedSavingsEntries: List<SavingsGoalEntryEntity>,
     val linkedDebts: List<com.example.data.local.entity.DebtEntity>,
+    val linkedTransferFees: List<TransactionEntity>,
     val sharesSettledByTransaction: List<GroupExpenseShareEntity>
 )
 
@@ -152,7 +153,7 @@ class TransactionRepository(
             }
 
             val feeId = if (feeTransaction != null) {
-                val insertedFeeId = transactionDao.insert(feeTransaction)
+                val insertedFeeId = transactionDao.insert(feeTransaction.copy(transferParentId = transferId))
                 if (insertedFeeId <= 0L) {
                     throw IllegalStateException("خطا در ثبت تراکنش کارمزد")
                 }
@@ -220,7 +221,8 @@ class TransactionRepository(
                 smsHash = original.smsHash,
                 recurringId = original.recurringId,
                 executedForDate = original.executedForDate,
-                createdAt = original.createdAt
+                createdAt = original.createdAt,
+                transferParentId = original.transferParentId
             )
             transactionDao.update(preserved)
 
@@ -248,12 +250,13 @@ class TransactionRepository(
                 val groupExpense = db.groupExpenseDao().getByTransactionId(transaction.id)
                 val savingsEntries = db.savingsGoalDao().getEntriesLinkedToTransaction(transaction.id)
                 val linkedDebts = db.debtDao().getByTransactionId(transaction.id)
+                val linkedTransferFees = transactionDao.getLinkedTransferFees(transaction.id)
                 val settledShares = db.groupExpenseDao().getSharesSettledByTransaction(transaction.id)
                 settledShares.forEach { share ->
                     db.groupExpenseDao().updateShare(share.copy(isSettled = false, settledTransactionId = null))
                 }
                 transactionDao.deleteById(transaction.id)
-                DeletedTransactionSnapshot(transaction, groupExpense, savingsEntries, linkedDebts, settledShares)
+                DeletedTransactionSnapshot(transaction, groupExpense, savingsEntries, linkedDebts, linkedTransferFees, settledShares)
             }
         }
 
@@ -279,6 +282,10 @@ class TransactionRepository(
                 snapshot.linkedDebts.forEach { debt ->
                     val debtId = db.debtDao().insert(debt)
                     if (debtId <= 0L) throw IllegalStateException("Failed to restore linked debt")
+                }
+                snapshot.linkedTransferFees.forEach { fee ->
+                    val feeId = transactionDao.insert(fee.copy(transferParentId = restoredId))
+                    if (feeId <= 0L) throw IllegalStateException("Failed to restore linked transfer fee")
                 }
                 if (snapshot.linkedSavingsEntries.isNotEmpty()) {
                     val restoredEntries = snapshot.linkedSavingsEntries.map {
