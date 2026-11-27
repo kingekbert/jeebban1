@@ -243,12 +243,14 @@ object WidgetStatusHelper {
         val items = WidgetDataStore.getItems(context)
         val newCount = items.size
         saveScanResult(context, newCount)
-        val statusText = formatWidgetStatusText(lastTime, newCount)
+        val app = context.applicationContext as? FinTrackApp
+        val appModule = app?.appModule ?: com.example.di.AppModule(context.applicationContext)
+        val isLocked = appModule.appLockRepository.lockEnabled.value &&
+            appModule.appLockRepository.locked.value
+        val statusText = if (isLocked) "برنامه قفل است" else formatWidgetStatusText(lastTime, newCount)
         val isDark = isDarkThemeActive(context)
 
         // Fetch categories from DB
-        val app = context.applicationContext as? FinTrackApp
-        val appModule = app?.appModule ?: com.example.di.AppModule(context.applicationContext)
         val allCategories = runBlocking {
             try {
                 appModule.categoryRepository.allCategories.firstOrNull() ?: emptyList()
@@ -278,7 +280,7 @@ object WidgetStatusHelper {
         val currentIndex = if (items.isNotEmpty()) {
             getCurrentTransactionIndex(context).coerceIn(0, items.size - 1)
         } else 0
-        val currentItem = items.getOrNull(currentIndex)
+        val currentItem = if (isLocked) null else items.getOrNull(currentIndex)
 
         for (appWidgetId in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_sms_scan)
@@ -299,7 +301,7 @@ object WidgetStatusHelper {
             views.setOnClickPendingIntent(R.id.widget_header, appPendingIntent)
 
             // 2. Scan Button: 100% Background Scan via Broadcast
-            val scanIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+            val scanIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                 action = SmsScanWidgetProvider.ACTION_TRIGGER_SCAN
             }
             val scanPendingIntent = PendingIntent.getBroadcast(
@@ -356,7 +358,7 @@ object WidgetStatusHelper {
                     views.setTextColor(R.id.btn_widget_prev_tx, titleColor)
                     views.setTextColor(R.id.btn_widget_next_tx, titleColor)
 
-                    val prevIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                    val prevIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                         action = SmsScanWidgetProvider.ACTION_PREV_TX
                     }
                     val prevPendingIntent = PendingIntent.getBroadcast(
@@ -367,7 +369,7 @@ object WidgetStatusHelper {
                     )
                     views.setOnClickPendingIntent(R.id.btn_widget_prev_tx, prevPendingIntent)
 
-                    val nextIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                    val nextIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                         action = SmsScanWidgetProvider.ACTION_NEXT_TX
                     }
                     val nextPendingIntent = PendingIntent.getBroadcast(
@@ -423,7 +425,7 @@ object WidgetStatusHelper {
                         views.setInt(btnId, "setBackgroundResource", catBtnBg)
                         views.setTextColor(btnId, catBtnTextColor)
 
-                        val regIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                        val regIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                             action = SmsScanWidgetProvider.ACTION_REGISTER_ITEM
                             putExtra("widget_action", "REGISTER_CATEGORY")
                             putExtra("extra_sms_hash", currentItem.smsHash)
@@ -455,7 +457,7 @@ object WidgetStatusHelper {
                     views.setTextColor(R.id.btn_cat_page, moreBtnTextColor)
                     views.setTextViewText(R.id.btn_cat_page, if (effectivePage == 0) "◀" else "▶")
 
-                    val switchPageIntent = Intent(context, SmsScanWidgetProvider::class.java).apply {
+                    val switchPageIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                         action = SmsScanWidgetProvider.ACTION_SWITCH_CATEGORY_PAGE
                     }
                     val switchPagePi = PendingIntent.getBroadcast(
@@ -498,7 +500,12 @@ object WidgetStatusHelper {
                 views.setViewVisibility(R.id.widget_card_flipper, View.GONE)
                 views.setViewVisibility(R.id.widget_empty_view, View.VISIBLE)
 
-                if (lastTime <= 0L) {
+                if (isLocked) {
+                    views.setTextViewText(R.id.widget_tv_empty_title, "برنامه قفل است 🔒")
+                    views.setTextColor(R.id.widget_tv_empty_title, emptyNormalColor)
+                    views.setTextViewText(R.id.widget_tv_empty_sub, "برای مشاهده اطلاعات مالی، ابتدا قفل برنامه را باز کنید.")
+                    views.setTextColor(R.id.widget_tv_empty_sub, statusColor)
+                } else if (lastTime <= 0L) {
                     views.setTextViewText(R.id.widget_tv_empty_title, "پیامک‌های بانکی ۷ روز اخیر")
                     views.setTextColor(R.id.widget_tv_empty_title, emptyNormalColor)
                     views.setTextViewText(R.id.widget_tv_empty_sub, "برای یافتن پیامک‌های ثبت‌نشده، دکمه «اسکن پیامک‌ها» را لمس کنید.")

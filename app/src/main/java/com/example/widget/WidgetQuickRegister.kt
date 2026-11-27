@@ -24,17 +24,34 @@ object WidgetQuickRegister {
             return@withContext
         }
 
-        val amount = intent.getLongExtra("extra_amount", 0L)
-        val typeStr = intent.getStringExtra("extra_type") ?: TransactionType.EXPENSE.name
-        val txType = try { TransactionType.valueOf(typeStr) } catch (e: Exception) { TransactionType.EXPENSE }
-        val date = intent.getLongExtra("extra_date", System.currentTimeMillis())
-        val bankName = intent.getStringExtra("extra_bank_name") ?: ""
-        val accountIdent = intent.getStringExtra("extra_account_ident") ?: ""
-        val note = intent.getStringExtra("extra_note") ?: ""
+        // Treat the widget payload only as a lookup key. Financial fields must come
+        // from the app-owned scanned-item cache, never from broadcast extras.
+        val sourceItem = WidgetDataStore.getItems(context).firstOrNull { it.smsHash == smsHash }
+        if (sourceItem == null) {
+            showErrorToast(context)
+            return@withContext
+        }
+        val parsed = sourceItem.parsedSms
+        val amount = parsed.amount ?: 0L
+        if (amount <= 0L) {
+            showErrorToast(context)
+            return@withContext
+        }
+        val txType = parsed.transactionType ?: TransactionType.EXPENSE
+        val date = parsed.date ?: sourceItem.date
+        val bankName = parsed.bankName ?: ""
+        val accountIdent = parsed.accountIdentifier ?: ""
+        val note = parsed.rawDescription?.ifBlank { sourceItem.rawText } ?: sourceItem.rawText
 
         try {
             val app = context.applicationContext as? FinTrackApp
             val appModule = app?.appModule ?: com.example.di.AppModule(context.applicationContext)
+            if (appModule.appLockRepository.lockEnabled.value &&
+                appModule.appLockRepository.locked.value
+            ) {
+                showErrorToast(context)
+                return@withContext
+            }
 
             // 0. Guard against duplicate registration across app/widget paths
             if (appModule.transactionRepository.isSmsHashRegistered(smsHash)) {
