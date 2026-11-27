@@ -73,6 +73,7 @@ class AtomicTransferWithFeeTest {
         override fun getAllWithDetails(): Flow<List<TransactionWithDetails>> = emptyFlow()
         override fun getByIdWithDetails(id: Long): Flow<TransactionWithDetails?> = emptyFlow()
         override fun getById(id: Long): Flow<TransactionEntity?> = emptyFlow()
+        override suspend fun getByIdSync(id: Long): TransactionEntity? = (activeStaging ?: committedTransactions).find { it.id == id }
         override fun getRecent(limit: Int): Flow<List<TransactionWithDetails>> = emptyFlow()
         override fun getByAccount(accountId: Long): Flow<List<TransactionWithDetails>> = emptyFlow()
         override fun getByDateRange(start: Long, end: Long): Flow<List<TransactionWithDetails>> = emptyFlow()
