@@ -82,7 +82,7 @@ fun AccountsScreen(
             onDismissRequest = { accountToDelete = null },
             title = { Text("حذف حساب", fontWeight = FontWeight.Bold) },
             text = {
-                Text("آیا از حذف حساب «${accountToDelete?.name}» اطمینان دارید؟ تراکنش‌های مرتبط حذف نخواهند شد.")
+                Text("آیا از حذف حساب «${accountToDelete?.name}» اطمینان دارید؟ تراکنش‌های مرتبط باقی می‌مانند اما از حساب جدا می‌شوند؛ پیامک‌های اختصاصی، مانده‌های ثبت‌شده و تراکنش‌های دوره‌ای این حساب حذف خواهند شد.")
             },
             confirmButton = {
                 TextButton(
