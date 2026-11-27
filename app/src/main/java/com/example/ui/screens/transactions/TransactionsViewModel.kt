@@ -379,7 +379,9 @@ class TransactionsViewModel(
     fun deleteTransaction(transaction: TransactionEntity) {
         recentlyDeletedSnapshot = null
         deleteJob = viewModelScope.launch {
-            recentlyDeletedSnapshot = transactionRepository.deleteTransactionWithUndoSnapshot(transaction)
+            recentlyDeletedSnapshot = runCatching {
+                transactionRepository.deleteTransactionWithUndoSnapshot(transaction)
+            }.getOrNull()
         }
     }
 
@@ -388,7 +390,7 @@ class TransactionsViewModel(
         viewModelScope.launch {
             pendingDelete?.join()
             recentlyDeletedSnapshot?.let { snapshot ->
-                transactionRepository.restoreDeletedTransaction(snapshot)
+                runCatching { transactionRepository.restoreDeletedTransaction(snapshot) }
                 recentlyDeletedSnapshot = null
                 deleteJob = null
             }
