@@ -25,6 +25,7 @@ data class DeletedTransactionSnapshot(
     val transaction: TransactionEntity,
     val groupExpense: GroupExpenseWithShares?,
     val linkedSavingsEntries: List<SavingsGoalEntryEntity>,
+    val linkedDebts: List<com.example.data.local.entity.DebtEntity>,
     val sharesSettledByTransaction: List<GroupExpenseShareEntity>
 )
 
@@ -178,6 +179,7 @@ class TransactionRepository(
             val original = transactionDao.getByIdSync(transaction.id)
                 ?: throw IllegalStateException("تراکنش برای ویرایش یافت نشد")
             val linkedSavings = db.savingsGoalDao().getEntriesLinkedToTransaction(transaction.id)
+            val linkedDebts = db.debtDao().getByTransactionId(transaction.id)
             val groupExpense = db.groupExpenseDao().getByTransactionId(transaction.id)
 
             if (linkedSavings.isNotEmpty()) {
@@ -190,6 +192,16 @@ class TransactionRepository(
                 }
                 if (transaction.type != expectedType) {
                     throw IllegalArgumentException("نوع تراکنش مرتبط با پس‌انداز را نمی‌توان تغییر داد")
+                }
+            }
+
+            if (linkedDebts.isNotEmpty()) {
+                val expectedType = when (linkedDebts.first().type) {
+                    com.example.data.local.entity.DebtType.OWED_TO_ME -> TransactionType.EXPENSE
+                    com.example.data.local.entity.DebtType.I_OWE -> TransactionType.INCOME
+                }
+                if (transaction.type != expectedType) {
+                    throw IllegalArgumentException("نوع تراکنش مرتبط با بدهی را نمی‌توان تغییر داد")
                 }
             }
 
@@ -215,6 +227,9 @@ class TransactionRepository(
             linkedSavings.singleOrNull()?.let { entry ->
                 db.savingsGoalDao().updateEntry(entry.copy(amount = transaction.amount, date = transaction.date))
             }
+            linkedDebts.forEach { debt ->
+                db.debtDao().update(debt.copy(amount = transaction.amount, createdAt = transaction.date, note = transaction.note))
+            }
         }
     }
 
@@ -232,12 +247,13 @@ class TransactionRepository(
             db.withTransaction {
                 val groupExpense = db.groupExpenseDao().getByTransactionId(transaction.id)
                 val savingsEntries = db.savingsGoalDao().getEntriesLinkedToTransaction(transaction.id)
+                val linkedDebts = db.debtDao().getByTransactionId(transaction.id)
                 val settledShares = db.groupExpenseDao().getSharesSettledByTransaction(transaction.id)
                 settledShares.forEach { share ->
                     db.groupExpenseDao().updateShare(share.copy(isSettled = false, settledTransactionId = null))
                 }
                 transactionDao.deleteById(transaction.id)
-                DeletedTransactionSnapshot(transaction, groupExpense, savingsEntries, settledShares)
+                DeletedTransactionSnapshot(transaction, groupExpense, savingsEntries, linkedDebts, settledShares)
             }
         }
 
@@ -259,6 +275,10 @@ class TransactionRepository(
                             throw IllegalStateException("Failed to restore group expense shares")
                         }
                     }
+                }
+                snapshot.linkedDebts.forEach { debt ->
+                    val debtId = db.debtDao().insert(debt)
+                    if (debtId <= 0L) throw IllegalStateException("Failed to restore linked debt")
                 }
                 if (snapshot.linkedSavingsEntries.isNotEmpty()) {
                     val restoredEntries = snapshot.linkedSavingsEntries.map {
